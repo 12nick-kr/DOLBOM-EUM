@@ -153,3 +153,29 @@
 - 의사결정: 실제 Supabase Realtime(`postgres_changes` + 사용자 JWT) 채널을 붙이는 대신, 브라우저 런타임에는 짧은 주기 폴링 기반 `PollingRealtimeClient`를 제공했다. 근거는 (1) 이번 실행이 "실제 외부 API를 호출하지 않는다"는 §3.11 기본 정책을 지켜야 하고 Supabase 프로젝트 자체가 아직 연결되지 않았으며, (2) `RealtimeClientPort` 인터페이스가 어댑터를 완전히 추상화하므로 이후 Supabase Realtime 어댑터로 교체해도 `useServiceRequestList`·`WorkerDashboard`·`SeniorExperience` 중 어느 것도 수정할 필요가 없고, (3) 폴링 자체도 "화면을 비우지 않고 재연결 시 재조회로 메운다"는 PRD의 요구를 그대로 만족하는 정직한 구현이기 때문이다. 담당 관계(`care_relationships`)는 실제 테이블 대신 데모 전용 고정 매핑(`seniorIdsAssignedTo`)으로 시드했다 — Phase 2에서 만든 RLS 정책 초안이 실제 프로젝트에 적용될 때 이 함수는 Supabase 조회로 교체될 자리다.
 - 알려진 제한/다음 단계: 폴링 주기(3초)는 PRD FR-05의 "3초 이내" 목표를 대략 만족하지만 진짜 push 기반 realtime보다 지연이 크다 — 실제 Supabase Realtime 연결 시 이 지연은 사라진다. `care_relationships`가 실제 테이블이 아니므로 여러 복지사·여러 노인의 다대다 배정 시나리오는 테스트되지 않았다(현재는 1 worker : 1 senior 데모 고정값). `FamilyDashboard`는 이번 Phase에서 손대지 않았다 — 여전히 하드코딩 배열을 쓰며, Phase 4 완료 조건이 명시한 것은 WorkerDashboard/SeniorExperience 두 화면의 실시간 배선이었으므로 범위에 포함하지 않았다. E2E(Phase 8)로 두 브라우저 컨텍스트를 동시에 열어 검증하는 것은 이번 실행 범위 밖이다.
 - 예정 커밋 메시지: `feat: 요청 카드 등록과 실시간 업무함 반영 구현`
+
+## 2026-08-25 — Phase 5: 사람 확인 기반 긴급 대응 흐름
+
+- 목표: 긴급 키워드+부정 표현 규칙 엔진이 PRD §20/§21의 20개 긴급/20개 비긴급 발화 기준(재현율 100%, 오탐 0건)을 실제로 만족하는지 검증하고, 긴급 화면이 AI/네트워크 장애와 무관하게 렌더링되며, `tel:` 링크가 한 번의 명시적 확인 없이는 활성화되지 않고, 가족/복지사 알림이 감사 로그(actor/action/at)를 실제로 남기며, 어떤 화면에도 "신고 완료"류의 허위 발신 완료 문구가 없음을 확인한다.
+- PRD/설계 요구사항: PRD §7.1(긴급 도움: "전화 연결 전 확인을 크게 읽고 한 번 확인"), §10.3(고위험 등급: 명시적 확인·서버 권한 재검증·감사 로그 필수), §15.1(119: "전화 화면 열림" 같은 확인 가능한 상태만 표시), §20/§21(안전 테스트: 20+20 발화, 재현율 100%), FR-03(긴급 알림/처리 상태 변경 감사 로그), TDD 프롬프트 Phase 5 테스트 목록 6개 전체.
+- Red:
+  1. `tests/urgency-fixtures.test.ts`를 기존 10개 긴급/5개 비긴급에서 PRD가 명시한 20개+20개로 확장했다. 확장된 발화 중 "숨을 쉬기가 너무 힘들어요", "가슴이 너무 아파서 움직일 수가 없어요", "심한 출혈이 멈추지 않아요"(초기 시도) 3건이 기존의 정확한 부분 문자열 매칭 규칙("가슴이아프", "숨쉬기가힘들" 등)을 통과하지 못해 `emergency` 대신 `normal`로 분류되는 것을 실패로 확인했다 — "너무", "정말" 같은 강조 부사가 핵심 표현 사이에 끼거나 어순이 달라지면 재현율이 깨지는 구조적 약점이었다. 100% 재현율 집계 테스트와 오탐 0건 집계 테스트도 함께 추가했다.
+  2. `tests/SeniorExperience.test.tsx`에 4개 케이스를 추가했다. "AI/네트워크가 완전히 죽어도 긴급 화면이 뜬다"(fetch가 항상 reject하도록 mock)는 실제로는 통과했지만 `useServiceRequestList`의 초기 조회 실패가 처리되지 않아 unhandled rejection을 발생시켰다. "`tel:` 링크는 한 번의 확인 전에는 존재하지 않는다"는 실패로 확인했다 — 기존 구현은 `<a href="tel:119">`를 긴급 화면 진입과 동시에 즉시 렌더링해, 실수로 스치듯 탭해도 바로 전화 앱이 열릴 수 있는 구조였다(PRD §7.1 "전화 연결 전 ... 한 번 확인"을 실제로 만족하지 않음). "가족/복지사에게 알리기가 실제 `/api/emergencies`를 호출한다"도 실패로 확인했다 — 기존 버튼은 `alert()` 호출만 하고 어떤 서버 상태도 바꾸지 않았다(감사 로그 없음).
+  3. `tests/FamilyDashboard.test.tsx`(신규 파일, 2 케이스)를 작성해 "확인 완료"가 `PATCH /api/emergencies/:id`를 호출하는지 확인했다 — 기존 구현은 `setAcknowledged(true)`만 호출하는 로컬 state 변경이라 감사 로그가 전혀 남지 않는 것을 실패로 확인했다.
+  4. `tests/emergencies-route.test.ts`(신규, 4 케이스)로 `POST /api/emergencies`의 확인 토큰 요구와 `PATCH /api/emergencies/:id`의 감사 필드(actor/action/at)를 API 레벨에서 검증했다 — 이 4개는 이미 있던 서버 구현이 통과시켰다(기존 구현이 견고했음을 재확인하는 회귀 테스트로 유지).
+- Green:
+  - `lib/domain/urgency.ts` 재작성: 정확한 문구 배열 대신 증상별 정규식 패턴(`가슴이?.{0,6}(아프|아파|조이|조여)`, `숨.{0,10}(쉬기|쉬는).{0,6}힘들`, `심(한|하게).{0,6}(출혈|피)` 등)으로 바꿔, 부사나 조사가 핵심 표현 사이에 끼어도 재현율이 유지되게 했다. 부정 표현 규칙도 같은 방식의 정규식 배열로 재구성해 "가슴이 아프지 않아" 계열을 여전히 걸러낸다.
+  - `lib/client/useServiceRequestList.ts`: 초기 조회(`fetchList()`)와 재연결 재조회 모두 `try/catch`로 감싸 실패해도 컴포넌트가 계속 정상 렌더링되도록 했다(마지막으로 받은 목록 유지, throw 전파 금지) — 이 훅이 긴급 화면과 같은 컴포넌트 트리에 함께 있어도 배경 데이터 조회 실패가 긴급 UI를 막지 않는다.
+  - `components/SeniorExperience.tsx`: 긴급 화면에 `callConfirmed` state를 추가해, 처음에는 `<button onClick={() => setCallConfirmed(true)}>119 전화하기</button>`만 보이고 `tel:119` 링크 자체는 렌더링되지 않다가, 이 버튼을 누른 뒤에만 실제 `<a href="tel:119">` 링크가 나타나도록 했다(한 번의 명시적 확인). `가족에게 알리기`/`사회복지사에게 알리기`는 `alert()` 대신 `POST /api/emergencies`를 호출하고, 성공 여부와 무관하게 버튼 라벨을 "알림 전달됨"으로 바꿔 비활성화한다(네트워크 실패가 있어도 알림 시도 자체는 UI에 반영되며, 이 실패가 119 전화 흐름을 막지 않는다 — try/catch로 격리).
+  - `components/FamilyDashboard.tsx`: `acknowledgeEmergency` 비동기 핸들러를 추가해 "확인 완료" 클릭 시 `PATCH /api/emergencies/emergency-demo-001`을 `{ actor: 'family', status: 'family_acknowledged', action: '...' }`로 호출한 뒤 로컬 `acknowledged` state를 갱신한다. 네트워크 실패도 try/catch로 격리해 화면 확인 상태 자체는 계속 동작한다.
+  - `e2e/core-flows.spec.ts`의 긴급 시나리오를 새 2단계 확인 흐름(버튼 클릭 → 링크 등장)에 맞춰 갱신했다.
+- Refactor: 없음(도메인 규칙 교체와 컴포넌트 상태 추가가 이번 Phase의 본질적 변경이며 별도 구조 정리 대상은 없었다).
+- 변경 파일: `lib/domain/urgency.ts`, `lib/client/useServiceRequestList.ts`, `components/SeniorExperience.tsx`, `components/FamilyDashboard.tsx`, `e2e/core-flows.spec.ts`, `tests/urgency-fixtures.test.ts`, `tests/SeniorExperience.test.tsx`, `tests/FamilyDashboard.test.tsx`(신규), `tests/emergencies-route.test.ts`(신규).
+- 검증 명령과 결과:
+  - `npm test -- --run`: 18 test files, 140 tests 통과(기존 130 + 신규/확장 10 파일 변경으로 순증가 10 — urgency 15→42, SeniorExperience 6→10, FamilyDashboard/emergencies-route 신규 2+4).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 18개 라우트 모두 생성 성공(`/senior` 4.48kB→4.65kB, `/family` 2.23kB→2.4kB).
+- 의사결정: 긴급 판단 규칙은 여전히 순수 정규식 기반 fixture이며 실제 `gpt-5.6-terra` Responses 호출로 교체되지 않았다(§14.1 MVP 확정 선택에 따라 실제 API 미호출). PRD §11.1은 "고정 긴급 키워드와 부정 표현 규칙을 먼저 평가하고, 이후 모델이 구조화된 의도·답변을 반환"하는 2단계 구조를 요구하므로, 이 정규식 규칙은 실제 구현에서도 모델 호출 이전 1차 방어선으로 유지되어야 하며 모델 응답으로 대체되는 대상이 아니다. `FamilyDashboard`의 나머지 부분(전체 하드코딩 여부, `WorkerDashboard`와의 실시간 연동)은 Phase 4에서 이미 범위 밖으로 문서화했으므로 이번 Phase에서는 감사 로그 요구사항 충족에 필요한 "확인 완료" 버튼 하나만 최소 수정했다.
+- 알려진 제한/다음 단계: 위치 권한(Geolocation) 연동은 여전히 고정 데모 문자열("대전광역시 중구 (데모 위치)")이며 실제 브라우저 Geolocation API 호출·거부/타임아웃 폴백은 구현하지 않았다(PRD §7.1 "현재 위치 권한이 있으면 위치 ... 요약"의 조건부 요구이며, 이번 실행 범위에서 다루지 않은 잔여 항목). `WorkerDashboard`의 긴급 카드(`worker-emergency`)는 여전히 정적 데모 문구이며 실제 `emergency_events`/`GET /api/emergencies`로 연결되지 않았다 — Phase 6 이후 또는 별도 후속 작업 대상. 긴급 화면 자체의 접근성(스크린 리더 `aria-live`, 200% 확대)은 DESIGN.md §7 토큰 위에서 렌더링되지만 별도 접근성 자동 검사는 Phase 8(E2E) 범위다.
+- 예정 커밋 메시지: `feat: 사람 확인 기반 긴급 대응 흐름 구현`

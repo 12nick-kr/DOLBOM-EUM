@@ -13,6 +13,9 @@ function stubFetch(handlers: { respond?: unknown[]; myRequests?: unknown[] } = {
     if (url === '/api/service-requests') {
       return { ok: true, json: async () => ({ id: 'request-new-1', status: 'new' }) };
     }
+    if (url === '/api/emergencies') {
+      return { ok: true, json: async () => ({ id: 'emergency-new-1', status: 'detected' }) };
+    }
     const next = respondQueue.shift();
     return { json: async () => next ?? { assistant_text: '', intent: 'conversation', urgency: 'normal' } };
   });
@@ -42,7 +45,45 @@ describe('senior accessible entry', () => {
     render(<SeniorExperience />);
     fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
     expect(screen.getByRole('heading')).toHaveTextContent('지금 119에전화할까요?');
-    expect(screen.getByRole('link', { name: /119 전화하기/ })).toHaveAttribute('href', 'tel:119');
+  });
+
+  it('renders the emergency screen even when the network/AI backend is completely unavailable', () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    render(<SeniorExperience />);
+    fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
+    expect(screen.getByRole('heading')).toHaveTextContent('지금 119에전화할까요?');
+    expect(screen.getByRole('button', { name: /^119 전화하기/ })).toBeVisible();
+  });
+
+  it('requires one explicit confirmation before the tel: link becomes active — the call button is not itself a live tel: link', () => {
+    stubFetch();
+    render(<SeniorExperience />);
+    fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
+    const callButton = screen.getByRole('button', { name: /^119 전화하기/ });
+    // Before confirming, there must be no live tel: link on the page (accidental dialing must be impossible).
+    expect(screen.queryByRole('link', { name: /119/ })).toBeNull();
+    fireEvent.click(callButton);
+    // After the one confirmation, the tel: link appears.
+    expect(screen.getByRole('link', { name: /119/ })).toHaveAttribute('href', 'tel:119');
+  });
+
+  it('never shows a message claiming the emergency report was actually sent/completed', () => {
+    stubFetch();
+    render(<SeniorExperience />);
+    fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
+    expect(screen.queryByText(/신고\s*완료/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^119 전화하기/ }));
+    expect(screen.queryByText(/신고\s*완료/)).toBeNull();
+  });
+
+  it('notifies family and worker through the real emergency API (audit trail), not a browser alert', async () => {
+    const fetchMock = stubFetch();
+    render(<SeniorExperience />);
+    fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
+    fireEvent.click(screen.getByRole('button', { name: '가족에게 알리기' }));
+    await Promise.resolve();
+    const emergencyCall = fetchMock.mock.calls.find((call) => call[0] === '/api/emergencies');
+    expect(emergencyCall).toBeDefined();
   });
 
   it('shows speech controls for an assistant answer', async () => {

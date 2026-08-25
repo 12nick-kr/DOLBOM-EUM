@@ -33,18 +33,27 @@ export function useServiceRequestList({ realtime, fetchList }: UseServiceRequest
   const sync = () => { setRequests(storeRef.current.list()); forceRender((n) => n + 1); };
 
   const refetch = async () => {
-    const fresh = await fetchList();
-    storeRef.current.hydrate(fresh);
-    sync();
+    try {
+      const fresh = await fetchList();
+      storeRef.current.hydrate(fresh);
+      sync();
+    } catch {
+      // 네트워크/서버 장애가 있어도 화면은 마지막으로 받은 목록을 유지한다(FR-08, §7.1 긴급 버튼은
+      // AI/네트워크 장애와 무관하게 동작해야 하며, 이 목록 조회 실패가 다른 화면을 막지 않아야 한다).
+    }
   };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const fresh = await fetchList();
-      if (cancelled) return;
-      storeRef.current.hydrate(fresh);
-      sync();
+      try {
+        const fresh = await fetchList();
+        if (cancelled) return;
+        storeRef.current.hydrate(fresh);
+        sync();
+      } catch {
+        // 초기 조회가 실패해도 컴포넌트는 정상 렌더링을 계속한다 — 빈 목록으로 시작할 뿐이다.
+      }
     })();
 
     if (!realtime) return () => { cancelled = true; };
@@ -58,7 +67,7 @@ export function useServiceRequestList({ realtime, fetchList }: UseServiceRequest
       setConnectionState(state);
       if (state === 'connected') {
         // 재연결 시 누락 구간을 서버 재조회로 메운다.
-        fetchList().then((fresh) => { if (!cancelled) { storeRef.current.hydrate(fresh); sync(); } });
+        fetchList().then((fresh) => { if (!cancelled) { storeRef.current.hydrate(fresh); sync(); } }).catch(() => {});
       }
     });
 
