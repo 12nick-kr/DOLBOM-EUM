@@ -23,23 +23,28 @@ export async function POST(request: NextRequest) {
       });
       if (error || !data.user) throw new Error(error?.message ?? '계정을 만들지 못했어요.');
 
-      const { error: profileError } = await admin.from('profiles').insert({
-        id: data.user.id,
-        role,
-        display_name: displayName,
-        phone_alias: phone,
-        account_status: 'active',
-      });
-      if (profileError) {
-        await admin.auth.admin.deleteUser(data.user.id);
-        throw new Error(profileError.message);
-      }
+      // 이후 어느 단계가 실패하든(프로필 저장, 로그인) 방금 만든 auth 사용자를 정리한다.
+      // 그렇지 않으면 이 번호로는 다시는 가입할 수 없는 고아 계정이 영구히 남는다 —
+      // 사용자에게는 "만든 적 없는데 이미 가입됨"으로 보이는 원인이었다.
+      try {
+        const { error: profileError } = await admin.from('profiles').insert({
+          id: data.user.id,
+          role,
+          display_name: displayName,
+          phone_alias: phone,
+          account_status: 'active',
+        });
+        if (profileError) throw new Error(profileError.message);
 
-      const response = NextResponse.json({ redirectTo: `/${role}` }, { status: 201 });
-      const client = createSupabaseResponseClient(request, response);
-      const { error: loginError } = await client.auth.signInWithPassword({ phone: virtualPhoneToE164(phone), password: pin });
-      if (loginError) throw new Error(loginError.message);
-      return response;
+        const response = NextResponse.json({ redirectTo: `/${role}` }, { status: 201 });
+        const client = createSupabaseResponseClient(request, response);
+        const { error: loginError } = await client.auth.signInWithPassword({ phone: virtualPhoneToE164(phone), password: pin });
+        if (loginError) throw new Error(loginError.message);
+        return response;
+      } catch (postCreateError) {
+        await admin.auth.admin.deleteUser(data.user.id).catch(() => {});
+        throw postCreateError;
+      }
     }
 
     const account = await createDemoAccount({ displayName, phone, pin, role });
@@ -48,9 +53,13 @@ export async function POST(request: NextRequest) {
     response.cookies.set(demoSessionCookie, token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 12 });
     return response;
   } catch (error) {
-    // Supabase Auth의 중복 전화번호 에러는 영문(예: "already been registered")으로 오므로
-    // 원문을 그대로 노출하지 않되, 실제로 가장 흔한 원인이 "이미 등록됨"이라는 걸 문구에 반영한다.
-    const message = error instanceof Error && error.message.includes('이미 사용') ? error.message : '이미 가입된 가상 전화번호예요. 다른 번호를 사용해 주세요.';
-    return NextResponse.json({ error: message }, { status: 409 });
+    const raw = error instanceof Error ? error.message : '';
+    // Supabase Auth의 중복 전화번호 에러는 영문(예: "already been registered")으로 온다.
+    // 실제 중복일 때만 409로 안내하고, 그 외 원인(설정 누락 등)은 원문을 노출하지 않되
+    // "이미 가입됨"으로 뭉뚱그리지 않는다 — 안 그러면 실제 원인을 알 수 없게 된다.
+    if (raw.includes('이미 사용') || /already.*registered/i.test(raw)) {
+      return NextResponse.json({ error: '이미 가입된 가상 전화번호예요. 다른 번호를 사용해 주세요.' }, { status: 409 });
+    }
+    return NextResponse.json({ error: '계정을 만들지 못했어요. 잠시 후 다시 시도해 주세요.' }, { status: 500 });
   }
 }
