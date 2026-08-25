@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { DemoBadge } from './DemoBadge';
 import { StatusPill } from './StatusPill';
 import { CareRequestCard } from './CareRequestCard';
-import type { ServiceRequest } from '@/lib/domain/types';
+import type { ServiceRequestView as ServiceRequest } from '@/lib/domain/types';
 import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
 import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 import { useEmergencyList } from '@/lib/client/useEmergencyList';
 import { emergencyStatusLabel } from '@/lib/domain/policies';
+import { useSessionProfile } from '@/lib/client/useSessionProfile';
+import { LogoutButton } from './LogoutButton';
 
 async function fetchFamilyRequests(): Promise<ServiceRequest[]> {
   const response = await fetch('/api/care-cards');
@@ -25,6 +27,7 @@ function useFamilyRealtime(): RealtimeClientPort {
 
 export function FamilyDashboard() {
   const [view, setView] = useState<'home' | 'emergency' | 'consent'>('home');
+  const profile = useSessionProfile();
   const { emergencies } = useEmergencyList();
   const [consents, setConsents] = useState({ health: true, location: true, emergency: true });
   const realtime = useFamilyRealtime();
@@ -37,9 +40,11 @@ export function FamilyDashboard() {
   }, [requests]);
   const latestRequest = requests[0];
   const latestEmergency = emergencies[0];
+  // 연결된 노인 이름은 서버가 카드에 붙여 준다. 아직 카드가 없으면 특정 호칭을 지어내지 않는다.
+  const seniorName = requests.find((item) => item.seniorName)?.seniorName;
 
   return <main className="family-shell"><DemoBadge />
-    <header className="app-header"><div><p className="eyebrow">돌봄이음 AI</p><h1>아버지의 오늘</h1></div><span className="avatar">이</span></header>
+    <header className="app-header"><div><p className="eyebrow">돌봄이음 AI</p><h1>{seniorName ? `${seniorName} 어르신의 오늘` : '오늘의 돌봄'}</h1></div><div className="session-actions"><span className="avatar">{profile?.displayName.slice(0, 1) ?? '가'}</span><LogoutButton className="header-logout" /></div></header>
     {view === 'home' && <>
       {latestEmergency && <button className={`alert-card ${latestEmergency.status === 'closed' ? 'resolved-alert-card' : ''}`} onClick={() => setView('emergency')}><StatusPill status={emergencyStatusLabel(latestEmergency.status)} /><strong>{latestEmergency.status === 'closed' ? '어르신이 긴급 상황을 종료했어요.' : latestEmergency.utterance}</strong><span>{new Date(latestEmergency.createdAt).toLocaleString('ko-KR')} · {latestEmergency.location} ›</span></button>}
       <section className="family-grid"><article><small>마지막 확인</small><strong>{latestRequest ? new Date(latestRequest.updatedAt).toLocaleString('ko-KR') : '기록 없음'}</strong><span>요청 카드 기준</span></article><article><small>오늘 상태</small><strong>{weekly.unresolved > 0 ? '도움 요청 확인 중' : '새 요청 없음'}</strong><span>요청 카드 기준</span></article></section>

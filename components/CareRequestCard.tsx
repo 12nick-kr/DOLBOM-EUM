@@ -1,21 +1,15 @@
 import type { ReactNode } from 'react';
-import { statusLabelFor } from '@/lib/domain/policies';
-import type { Role, ServiceRequest } from '@/lib/domain/types';
+import { requestTypeLabel, statusLabelFor } from '@/lib/domain/policies';
+import type { Role, ServiceRequestView } from '@/lib/domain/types';
 import { StatusPill } from './StatusPill';
 import { formatDesiredDate } from '@/lib/domain/dateResolution';
 import { scheduleStateFor, scheduleStateLabel } from '@/lib/domain/requestSchedule';
 
-const typeLabel: Record<ServiceRequest['type'], string> = {
-  hospital_escort: '병원 동행 요청',
-  welfare_info: '복지 정보 안내',
-  daily_help: '일상 도움 요청',
-};
-
 export type CareRequestCardProps = {
-  card: ServiceRequest & { transcript?: string };
+  /** 서버가 역할별 redaction과 함께 담당 노인 이름(`seniorName`)을 붙여 내려준다. */
+  card: ServiceRequestView & { transcript?: string };
   role: Role;
   unread?: boolean;
-  seniorName?: string;
   onSelect?: () => void;
   actions?: ReactNode;
   onDelete?: (id: string) => void;
@@ -23,9 +17,11 @@ export type CareRequestCardProps = {
 };
 
 /** 세 역할이 공유하는 요청 카드. 역할 차이는 메타 공개 범위와 행동 영역에만 둔다. */
-export function CareRequestCard({ card, role, unread = false, seniorName = '김순자 어르신', onSelect, actions, onDelete, deleting = false }: CareRequestCardProps) {
+export function CareRequestCard({ card, role, unread = false, onSelect, actions, onDelete, deleting = false }: CareRequestCardProps) {
   const desiredDate = formatDesiredDate(card.details);
   const scheduleState = scheduleStateFor(card);
+  // 이름이 아직 없으면 특정 인물을 지어내지 않고 중립 문구를 보여 준다.
+  const seniorName = card.seniorName ? `${card.seniorName} 어르신` : '담당 어르신';
   return (
     <article className={`care-request-card${unread ? ' unread' : ''}`} data-density={role === 'senior' ? 'comfort' : 'standard'}>
       <div className="care-card-heading">
@@ -35,7 +31,7 @@ export function CareRequestCard({ card, role, unread = false, seniorName = '김�
         {role === 'worker' && onDelete && <button className="care-card-delete" aria-label="요청 삭제" disabled={deleting} onClick={() => onDelete(card.id)}>{deleting ? '삭제 중' : '삭제'}</button>}
       </div>
       <div>
-        <p className="eyebrow">{typeLabel[card.type]}</p>
+        <p className="eyebrow">{requestTypeLabel[card.type]}</p>
         <strong className="care-card-summary"><span className="ai-pill">AI</span>{card.summary}</strong>
       </div>
       <dl className="care-card-meta">

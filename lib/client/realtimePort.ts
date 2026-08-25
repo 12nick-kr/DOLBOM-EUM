@@ -1,4 +1,4 @@
-import type { ServiceRequest } from '@/lib/domain/types';
+import type { ServiceRequestView as ServiceRequest } from '@/lib/domain/types';
 
 export type RealtimeClientEvent =
   | { type: 'insert' | 'update'; request: ServiceRequest }

@@ -107,6 +107,12 @@ export const serviceRequestSchema = z.object({
 });
 export type ServiceRequest = z.infer<typeof serviceRequestSchema>;
 
+/**
+ * 화면이 받는 카드. 서버가 역할별 redaction과 함께 담당 노인 표시 이름을 덧붙인다.
+ * DB 스키마에는 없는 파생 필드이므로 저장용 `ServiceRequest`와 분리해 둔다.
+ */
+export type ServiceRequestView = ServiceRequest & { seniorName?: string };
+
 /** 노인 확인 전 클라이언트에서만 존재하는 요청 카드 초안. 서버에 저장하지 않는다. */
 export type ServiceRequestDraft = {
   seniorId: string;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { selectAiPort } from '@/lib/server/aiFactory';
+import { authenticatedActor } from '@/lib/server/auth';
 
 /** PRD §11.1 "최대 60초"에 대응하는 앱 자체 업로드 상한 — 60초 음성이 이 크기를 넘지 않는다고 가정한 보수적 상한. */
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10MB
@@ -11,6 +12,9 @@ const ALLOWED_MIME_PREFIXES = ['audio/'];
  * 버퍼뿐이고 응답 후 즉시 GC 대상이 된다.
  */
 export async function POST(request: NextRequest) {
+  const actor = await authenticatedActor(request);
+  if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
+  if (actor.role !== 'senior') return NextResponse.json({ error: '어르신 계정만 음성을 입력할 수 있어요.' }, { status: 403 });
   let form: FormData;
   try {
     form = await request.formData();

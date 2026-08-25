@@ -11,6 +11,7 @@ const emergency = { id: 'emergency-demo-001', seniorId: 'senior-demo-001', utter
 
 function dashboardFetch(cards = [doneCard]) {
   return vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/session') return { ok: true, json: async () => ({ data: { id: 'family-1', role: 'family', displayName: '이지현' } }) };
     if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: cards, is_demo: true }) };
     if (url === '/api/emergencies' && !init?.method) return { ok: true, json: async () => ({ data: [emergency], is_demo: true }) };
     return { ok: true, json: async () => ({ ...emergency, status: 'family_acknowledged' }) };
@@ -62,6 +63,7 @@ describe('FamilyDashboard — linked-family emergency visibility is read-only', 
   it('refreshes emergency cards immediately when the realtime stream signals a change', async () => {
     let emergencyReads = 0;
     const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/session') return { ok: true, json: async () => ({ data: { id: 'family-1', role: 'family', displayName: '이지현' } }) };
       if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [] }) };
       if (url === '/api/emergencies') {
         emergencyReads += 1;
@@ -79,6 +81,7 @@ describe('FamilyDashboard — linked-family emergency visibility is read-only', 
   it('shows a senior-closed emergency as ended instead of an active unconfirmed alert', async () => {
     const closedEmergency = { ...emergency, status: 'closed' };
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/session') return { ok: true, json: async () => ({ data: { id: 'family-1', role: 'family', displayName: '이지현' } }) };
       if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [] }) };
       return { ok: true, json: async () => ({ data: [closedEmergency] }) };
     }));

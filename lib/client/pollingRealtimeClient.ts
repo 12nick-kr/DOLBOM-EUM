@@ -1,23 +1,25 @@
 'use client';
-import type { ServiceRequest } from '@/lib/domain/types';
+import type { ServiceRequestView as ServiceRequest } from '@/lib/domain/types';
 import type { RealtimeClientEvent, RealtimeClientPort, RealtimeConnectionState } from './realtimePort';
 
 /**
- * 실제 Supabase Realtime 채널이 붙기 전까지 쓰는 브라우저 런타임 어댑터.
+ * SSE(`/api/care-events`)가 끊겼을 때 쓰는 폴백 어댑터.
  * 짧은 주기로 목록을 다시 조회해 이전 스냅샷과 비교하고, 새 카드/갱신된 카드를 insert/update
- * 이벤트로 변환해 내보낸다. 컴포넌트/훅은 `RealtimeClientPort`에만 의존하므로, 이 구현을
- * Supabase Realtime 어댑터로 교체해도 `useServiceRequestList`는 변경할 필요가 없다.
+ * 이벤트로 변환해 내보낸다. 컴포넌트/훅은 `RealtimeClientPort`에만 의존하므로, 어느 쪽이
+ * 실제로 이벤트를 만들어 내든 `useServiceRequestList`는 변경할 필요가 없다.
  */
 export class PollingRealtimeClient implements RealtimeClientPort {
   private listeners = new Set<(event: RealtimeClientEvent) => void>();
   private connectionListeners = new Set<(state: RealtimeConnectionState) => void>();
-  private state: RealtimeConnectionState = 'connected';
+  // 첫 조회가 성공하기 전까지는 연결됨을 주장하지 않는다 — 서버가 죽어 있어도
+  // 최초 한 주기 동안 "연결됨" 배지가 뜨던 원인이었다.
+  private state: RealtimeConnectionState = 'disconnected';
   private known = new Map<string, string>(); // id -> updatedAt
   private timer: ReturnType<typeof setInterval> | null = null;
   private immediateTimer: ReturnType<typeof setTimeout> | null = null;
   private active = true;
 
-  constructor(private fetchList: () => Promise<ServiceRequest[]>, private intervalMs = 1000) {
+  constructor(private fetchList: () => Promise<ServiceRequest[]>, private intervalMs = 5000) {
     this.start();
   }
 
@@ -30,7 +32,7 @@ export class PollingRealtimeClient implements RealtimeClientPort {
   private async tick() {
     try {
       const rows = await this.fetchList();
-      if (this.state === 'disconnected') this.setConnectionState('connected');
+      this.setConnectionState('connected');
       const seen = new Set(rows.map((row) => row.id));
       for (const row of rows) {
         const knownUpdatedAt = this.known.get(row.id);

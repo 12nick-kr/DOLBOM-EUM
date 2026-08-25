@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { ServiceRequest } from '@/lib/domain/types';
+import type { ServiceRequestView as ServiceRequest } from '@/lib/domain/types';
 import { RequestListStore } from './requestListStore';
 import type { RealtimeClientPort, RealtimeConnectionState } from './realtimePort';
 

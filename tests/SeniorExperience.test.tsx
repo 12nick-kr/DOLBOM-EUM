@@ -10,6 +10,9 @@ function stubFetch(handlers: { respond?: unknown[]; myRequests?: unknown[]; tran
     if (url === '/api/care-cards' && (!init || init.method === undefined)) {
       return { json: async () => ({ data: handlers.myRequests ?? [], is_demo: true }) };
     }
+    if (url === '/api/session') {
+      return { ok: true, json: async () => ({ data: { id: 'senior-1', role: 'senior', displayName: '김순자' } }) };
+    }
     if (url === '/api/senior-inputs') {
       return { ok: true, json: async () => ({ id: 'request-new-1', status: 'new' }) };
     }
