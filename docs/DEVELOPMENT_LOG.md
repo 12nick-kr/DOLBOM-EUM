@@ -271,3 +271,20 @@
 - 의사결정: 이번 발견은 두 가지가 섞여 있었다는 점을 분명히 남긴다 — (1) 계정 모델 권한은 소유자의 변경 이후 실제로 해금되었으나 OpenAI 쪽 전파 지연으로 초기 재시도가 flaky하게 실패했다(코드가 손댈 수 없는 외부 요인), (2) 그와 별개로 `openaiAdapter.ts`에는 무음/짧은 오디오의 정상 빈 응답을 오류로 오분류하는 실제 버그가 있었다(코드 결함, 이번에 수정). 두 원인을 구분하지 않았다면 "권한이 아직도 없다"고 잘못 결론 내릴 뻔했다.
 - 알려진 제한/다음 단계: 실제 사용자 음성(무음이 아닌)에 대한 전사 정확도는 여전히 검증하지 않았다 — smoke test는 연결·권한만 확인한다. `SpeechControls.tsx`가 `/api/ai/speech`를 실제로 소비하도록 클라이언트 재생 배선은 여전히 다음 과제로 남아 있다.
 - 예정 커밋 메시지: `fix: OpenAI 전사 어댑터의 빈 응답 오분류 수정`
+
+## 2026-08-25 — SpeechControls를 실제 서버 TTS로 연결
+
+- 목표: `SpeechControls.tsx`가 지금까지 `/api/ai/speech`를 전혀 호출하지 않고 브라우저 `speechSynthesis`만 사용하던 것을, PRD FR-07/TDD §3.7 계약대로 실제 서버 TTS를 먼저 시도하고 실패시에만 폴백하도록 고친다.
+- PRD 요구사항: FR-07(서버 TTS 우선, 5초 초과/실패 시 브라우저 폴백), §12(`/api/ai/speech`는 임의 텍스트가 아니라 권한 검증된 `assistant_turn_id`만 변환).
+- Red: `tests/SpeechControls.test.tsx`(신규, 4 케이스)를 먼저 작성했다 — (1) `assistantTurnId`가 있으면 `/api/ai/speech`를 호출하고 반환된 `audio/mpeg`를 재생해야 함, (2) 서버가 JSON `speech_status: 'browser_fallback'`을 주면 브라우저 음성으로 폴백, (3) 호출 자체가 실패해도 폴백, (4) `assistantTurnId`가 없으면 애초에 서버를 호출하지 않고 브라우저 음성만 사용. 실행 결과 컴포넌트가 `assistantTurnId` prop 자체를 몰라 `fetch`를 전혀 호출하지 않고 무조건 `speechSynthesis`를 불러 실패(원하는 이유로 실패 확인).
+- Green: `components/SpeechControls.tsx`에 `assistantTurnId?: string` prop을 추가했다. `play()`는 `assistantTurnId`가 있으면 5초 AbortController 타임아웃과 함께 `POST /api/ai/speech`를 호출하고, 응답 `Content-Type`이 `audio/*`면 `Blob`+`URL.createObjectURL`로 `<audio>` 재생, 아니면(JSON 폴백 신호) 또는 호출 실패/타임아웃 시 기존 브라우저 `speechSynthesis` 경로로 떨어진다. `components/SeniorExperience.tsx`에 `answerTurnId` state를 추가해 `/api/ai/respond` 응답의 `id`(이미 route가 `{...turn}`으로 전체를 반환하고 있어 별도 route 수정 불필요)를 저장하고, 실제 AI 답변을 보여주는 두 `<SpeechControls>` 호출(요청 초안 확인 화면, 일반 답변 화면)에 `assistantTurnId={answerTurnId}`를 전달했다. 고정 안내 문구(말동무 첫 인사)는 서버에 대응하는 turn이 없으므로 `assistantTurnId`를 주지 않아 기존처럼 브라우저 음성만 쓴다.
+- Refactor: 테스트의 jsdom `HTMLMediaElement.pause`/`URL.createObjectURL` 미구현으로 인한 실패를 스텁으로 보정하는 과정에서 `stubAudioPlayback()` 헬퍼로 정리했다.
+- 변경 파일: `components/SpeechControls.tsx`, `components/SeniorExperience.tsx`, `tests/SpeechControls.test.tsx`(신규).
+- 검증 명령과 결과:
+  - `npm test -- --run`: 22 test files, 161 tests 통과(기존 157 → 161, 신규 SpeechControls 4).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 전 라우트 생성 성공.
+- 의사결정: 서버 TTS 요청 타임아웃은 `AbortController` 5초로 클라이언트에서도 동일하게 걸었다 — 서버(`app/api/ai/speech/route.ts`)가 이미 5초 내부 타임아웃으로 JSON 폴백을 반환하지만, 네트워크 자체가 느리거나 응답이 오지 않는 경우까지 대비해 클라이언트도 독립적으로 타임아웃한다(PRD FR-07 "5초를 넘기면 브라우저 TTS 폴백"은 사용자 체감 기준이지 서버 내부 시간만이 아니다).
+- 알려진 제한/다음 단계: 이제 코드 경로는 실제 서버 TTS를 시도하지만, Supabase 스키마가 아직 실제 프로젝트에 적용되지 않아(다음 항목 참고) 요청 카드 등록→복지사 업무함 실시간 반영의 전체 수직 흐름은 실제 DB 대상으로는 아직 검증되지 않았다.
+- 예정 커밋 메시지: `feat: SpeechControls가 실제 서버 TTS를 우선 사용하도록 연결`
