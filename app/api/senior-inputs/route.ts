@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requestDetailsSchema, requestInputTypeSchema, requestTypeSchema, urgencySchema } from '@/lib/domain/types';
-import { classifyUrgency } from '@/lib/domain/urgency';
+import { classifyUrgency, detectSafetyRisk } from '@/lib/domain/urgency';
 import { authenticatedActor } from '@/lib/server/auth';
 import { emergencyEvents, seniorInputs, seniorInputsProvider, serviceRequests } from '@/lib/server/store';
 
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: '최종 확인한 입력 내용을 확인해 주세요.' }, { status: 400 });
 
   const hardGate = classifyUrgency(parsed.data.transcript);
+  const safetyRisk = detectSafetyRisk(parsed.data.transcript);
   const isEmergency = hardGate.urgency === 'emergency';
   const category = isEmergency ? 'emergency' as const : parsed.data.request ? 'service_request' as const : 'daily' as const;
   const urgency = isEmergency ? 'emergency' as const : parsed.data.urgency ?? (parsed.data.request ? 'welfare' as const : 'normal' as const);
@@ -68,6 +69,8 @@ export async function POST(request: NextRequest) {
         details: parsed.data.request.details,
         missingFields: parsed.data.request.missingFields,
         dueAt: parsed.data.request.dueAt,
+        riskLevel: safetyRisk.level,
+        riskReasons: safetyRisk.reasons,
         idempotencyKey: parsed.data.idempotencyKey,
       });
       event = await seniorInputs.attachServiceRequest(event.id, card.id);

@@ -136,9 +136,13 @@ export function flexibleDesiredDate(expression = '담당자와 일정 협의'): 
 export function formatDesiredDate(details: RequestDetails): string | undefined {
   if (details.dateResolution === 'needs_coordination') return '담당자와 일정 협의';
   if (!details.desiredDateStart) return details.desiredAt;
+  const humanDate = (value: string) => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${Number(match[2])}월 ${Number(match[3])}일` : value;
+  };
   const range = details.desiredDateEnd && details.desiredDateEnd !== details.desiredDateStart
-    ? `${details.desiredDateStart} ~ ${details.desiredDateEnd}`
-    : details.desiredDateStart;
+    ? `${humanDate(details.desiredDateStart)} ~ ${humanDate(details.desiredDateEnd)}`
+    : humanDate(details.desiredDateStart);
   const timeLabels: Record<NonNullable<RequestDetails['timeWindow']>, string> = {
     dawn: '새벽', morning: '오전', midday: '점심', afternoon: '오후', evening: '저녁', flexible: '시간 협의',
   };

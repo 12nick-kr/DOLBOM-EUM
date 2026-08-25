@@ -46,6 +46,10 @@ describe('mapRowToServiceRequest — Postgres row -> domain ServiceRequest (PRD 
       completedAt: null,
       completedBy: null,
       memo: null,
+      riskLevel: 'normal',
+      riskReasons: [],
+      riskReviewedAt: null,
+      riskReviewedBy: null,
       createdAt: '2026-08-25T00:00:00Z',
       updatedAt: '2026-08-25T00:00:00Z',
     });

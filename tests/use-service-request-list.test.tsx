@@ -46,7 +46,7 @@ describe('useServiceRequestList — worker inbox realtime sync (Phase 4 key deli
     render(<Harness realtime={realtime} />);
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
     act(() => { realtime.emit({ type: 'insert', request: card({ id: 'incoming2' }) }); });
-    await waitFor(() => expect(screen.getByTestId('unread')).toHaveTextContent('1'));
+    await waitFor(() => expect(screen.getByTestId('unread')).toHaveTextContent('2'));
   });
 
   it('removes a card immediately when a realtime delete event arrives', async () => {

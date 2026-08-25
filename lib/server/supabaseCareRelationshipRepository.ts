@@ -18,8 +18,14 @@ export class SupabaseCareRelationshipRepository implements CareRelationshipRepos
 
   async getProfile(id: string) {
     const { data, error } = await this.client.from('profiles').select('id, role, display_name, login_id').eq('id', id).maybeSingle();
-    if (error) throw new Error(error.message);
-    return data ? mapProfile(data as ProfileRow) : undefined;
+    if (!error) return data ? mapProfile(data as ProfileRow) : undefined;
+    // 이전 배포에서 login_id 마이그레이션이 누락되어도 담당 그룹 자체가 빈 화면이 되지 않게 한다.
+    if (error.code === '42703') {
+      const fallback = await this.client.from('profiles').select('id, role, display_name').eq('id', id).maybeSingle();
+      if (fallback.error) throw new Error(fallback.error.message);
+      return fallback.data ? mapProfile({ ...(fallback.data as Omit<ProfileRow, 'login_id'>), login_id: null }) : undefined;
+    }
+    throw new Error(error.message);
   }
 
   async seniorIdsForMember(memberId: string, relationshipType?: 'family' | 'worker') {
@@ -37,7 +43,7 @@ export class SupabaseCareRelationshipRepository implements CareRelationshipRepos
       const senior = await this.getProfile(seniorId);
       if (!senior) continue;
       const { data: group } = await this.client.from('care_groups').select('id').eq('senior_id', seniorId).maybeSingle();
-      const { data: rows, error } = await this.client.from('care_relationships').select('member_id, relationship_type').eq('senior_id', seniorId).eq('status', 'active');
+      const { data: rows, error } = await this.client.from('care_relationships').select('member_id, relationship_type').eq('senior_id', seniorId).eq('status', 'active').or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`);
       if (error) throw new Error(error.message);
       const profiles = (await Promise.all((rows ?? []).map((row) => this.getProfile(row.member_id as string)))).filter(Boolean) as CareProfile[];
       const workerIds = new Set((rows ?? []).filter((row) => row.relationship_type === 'worker').map((row) => row.member_id));

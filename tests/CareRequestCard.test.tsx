@@ -16,6 +16,7 @@ describe('CareRequestCard shared role rendering', () => {
     expect(screen.queryByText('원문 발화')).toBeNull();
 
     rerender(<CareRequestCard card={card} role="worker" />);
+    fireEvent.click(screen.getByText('확인한 원문 보기'));
     expect(screen.getByText('원문 발화')).toBeVisible();
   });
 

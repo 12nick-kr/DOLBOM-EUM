@@ -65,9 +65,9 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     render(<WorkerDashboard />);
     fireEvent.click(screen.getByRole('button', { name: /요청 업무함/ }));
     const card = (await screen.findByText(inProgress.summary)).closest('article') as HTMLElement;
-    const inboxCompleteButton = within(card).getByRole('button', { name: '완료' });
+    const inboxCompleteButton = within(card).getByRole('button', { name: '완료 처리' });
     expect(inboxCompleteButton).toBeEnabled();
-    expect(within(card).getByRole('button', { name: '진행중' })).toBeDisabled();
+    expect(within(card).queryByRole('button', { name: '진행중' })).toBeNull();
     fireEvent.click(inboxCompleteButton);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${inProgress.id}/complete`, { method: 'POST' }));
   });

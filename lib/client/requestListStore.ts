@@ -35,7 +35,7 @@ export class RequestListStore {
       if (!next.has(id) && existing.updatedAt > requestedAt && !this.tombstones.has(id)) next.set(id, existing);
     }
     this.rows = next;
-    for (const id of this.unread) if (!this.rows.has(id)) this.unread.delete(id);
+    this.unread = new Set([...this.rows.values()].filter((request) => !request.acknowledgedAt).map((request) => request.id));
   }
 
   /** TTL이 지난 tombstone을 버린다. 그 시점엔 서버 정본이 이미 삭제를 반영했으므로 부활 위험이 없다. */
@@ -55,7 +55,8 @@ export class RequestListStore {
     const isNew = !existing;
     if (existing && existing.updatedAt >= request.updatedAt) return;
     this.rows.set(request.id, request);
-    if (isNew) this.unread.add(request.id);
+    if (request.acknowledgedAt) this.unread.delete(request.id);
+    else if (isNew) this.unread.add(request.id);
   }
 
   remove(id: string, deletedAt = new Date().toISOString()): ServiceRequest | undefined {
@@ -71,6 +72,8 @@ export class RequestListStore {
   restore(request: ServiceRequest): void {
     this.tombstones.delete(request.id);
     this.rows.set(request.id, request);
+    if (request.acknowledgedAt) this.unread.delete(request.id);
+    else this.unread.add(request.id);
   }
 
   list(): ServiceRequest[] {

@@ -33,6 +33,8 @@ export type RequestStatus = z.infer<typeof requestStatusSchema>;
 /** 서버에 저장 가능한 상태만 — `draft`는 클라이언트 전용이라 여기서 제외한다. */
 export const persistedRequestStatusSchema = z.enum(['new', 'in_progress', 'done', 'rejected']);
 export type PersistedRequestStatus = z.infer<typeof persistedRequestStatusSchema>;
+export const requestRiskLevelSchema = z.enum(['normal', 'attention', 'emergency']);
+export type RequestRiskLevel = z.infer<typeof requestRiskLevelSchema>;
 
 export const requestTypeSchema = z.enum(['hospital_escort', 'welfare_info', 'daily_help']);
 export type RequestType = z.infer<typeof requestTypeSchema>;
@@ -103,6 +105,10 @@ export const serviceRequestSchema = z.object({
   completedAt: z.string().nullable().optional(),
   completedBy: z.string().nullable().optional(),
   memo: z.string().max(500).nullable().optional(),
+  riskLevel: requestRiskLevelSchema.optional(),
+  riskReasons: z.array(z.string()).optional(),
+  riskReviewedAt: z.string().nullable().optional(),
+  riskReviewedBy: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
