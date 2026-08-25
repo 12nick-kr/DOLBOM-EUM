@@ -9,6 +9,7 @@ export interface EmergencyRepository {
   get(id: string): Promise<EmergencyEvent | undefined>;
   create(input: CreateEmergencyInput): Promise<EmergencyEvent>;
   update(id: string, input: UpdateEmergencyInput): Promise<EmergencyEvent>;
+  delete(id: string, actorId: string): Promise<EmergencyEvent>;
 }
 
 export class InMemoryEmergencyRepository implements EmergencyRepository {
@@ -27,5 +28,11 @@ export class InMemoryEmergencyRepository implements EmergencyRepository {
     event.status = input.status;
     event.actions.push({ actor: input.actor, action: input.action, result: '앱 내 처리 상태 반영', at: new Date().toISOString() });
     return event;
+  }
+  async delete(id: string, _actorId: string) {
+    const index = this.rows.findIndex((row) => row.id === id);
+    if (index < 0) throw new Error('알림을 찾을 수 없습니다.');
+    const [deleted] = this.rows.splice(index, 1);
+    return deleted;
   }
 }

@@ -429,6 +429,9 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 
 .worker-emergency { width: 100%; padding: var(--gap-card); background: var(--red-bg); border-color: var(--red); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-16); text-align: left; }
 .worker-emergency p { font: var(--text-body); font-size: 13px; color: var(--ink-2); margin: var(--space-4) 0 0; }
+.worker-emergency-detail { padding: var(--gap-card); display: grid; gap: var(--space-12); }
+.worker-emergency-detail > div { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); }
+.worker-emergency-detail button { min-height: var(--touch-min); border-radius: var(--radius-control); padding: var(--space-8) var(--space-12); font-weight: 700; }
 
 .worker-columns, .case-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-16); }
 .worker-columns .card, .case-grid .card, .worker-content > .card { padding: var(--gap-card); margin: 0; }

@@ -69,4 +69,22 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     fireEvent.click(screen.getByRole('button', { name: '처리 완료' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${inProgress.id}/complete`, { method: 'POST' }));
   });
+
+  it('optimistically removes an emergency after the assigned worker confirms hard delete', async () => {
+    const emergency = { id: 'emergency-delete-1', seniorId: seedCard.seniorId, utterance: '숨쉬기가 힘들어요.', location: '대전광역시 중구', level: 'emergency', status: 'detected', createdAt: '2026-08-25T00:00:00Z', actions: [] };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [seedCard] }) };
+      if (url === '/api/emergencies' && !init?.method) return { ok: true, json: async () => ({ data: [emergency] }) };
+      if (url === `/api/emergencies/${emergency.id}` && init?.method === 'DELETE') return { ok: true, json: async () => ({ deleted: true }) };
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<WorkerDashboard />);
+    fireEvent.click(await screen.findByRole('button', { name: /자세히 보기/ }));
+    fireEvent.click(screen.getByRole('button', { name: '긴급 알림 해제 및 삭제' }));
+    const dialog = screen.getByRole('dialog', { name: '긴급 알림을 해제하고 삭제할까요?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '해제 및 삭제' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/emergencies/${emergency.id}`, { method: 'DELETE' }));
+    expect(screen.queryByText(emergency.utterance)).toBeNull();
+  });
 });
