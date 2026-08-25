@@ -336,3 +336,22 @@
 - 의사결정: 이 시점부로 PRD §14 표의 Supabase 행 판정을 `현재 구성 불가`에서 `실행 확인`으로 승격할 근거가 마련됐다(다음 PRD 편집에서 반영). 요청 카드 등록→업무함 반영→가족 조회의 핵심 수직 흐름이 이제 실제 OpenAI API와 실제 Supabase Postgres 양쪽 모두로 end-to-end 검증됐다 — 남은 것은 브라우저 UI를 통한 수동 확인과 Realtime(현재는 폴링) 채널 업그레이드다.
 - 알려진 제한/다음 단계: 이번 검증은 서버 API를 직접 호출한 것이며, 실제 브라우저에서 노인 화면의 마이크 녹음 → 전사 → 초안 확인 → 등록까지 전체 UI 흐름을 사람이 눈으로 확인하지는 않았다. `PollingRealtimeClient`의 3초 폴링이 실제 Supabase 백엔드로도 문제없이 동작하는지도 API 레벨에서는 확인됐지만 브라우저 탭 두 개를 동시에 띄운 시각적 확인은 아직 하지 않았다.
 - 예정 커밋 메시지: (코드 변경 없음 — 검증 기록만 dev log에 추가)
+
+## 2026-08-25 — 서버 중계 SSE Realtime 시도와 롤백 (프로세스 내부 pub/sub의 근본 결함 발견)
+
+- 목표: `PollingRealtimeClient`(3초 폴링)를 실제 push 기반 실시간으로 업그레이드한다. PRD §11.4는 Supabase Realtime `postgres_changes` + 사용자 JWT 구조를 정의하지만, 이 앱은 아직 실제 Supabase Auth가 없어 브라우저가 직접 구독하면 `auth.uid()`가 항상 null이라 RLS가 모든 행을 막는다는 것을 먼저 확인했다. 그래서 "서버가 `SUPABASE_SECRET_KEY`(RLS 우회)로 대신 구독하고 SSE로 브라우저에 중계"하는 절충안으로 진행했다(소유자 승인).
+- PRD 요구사항: §11.4(실시간 동기화 구조, "실시간은 최적화이고 정본은 항상 서버 조회다"), TDD §3.9.
+- 시도한 구현: `app/api/service-requests/stream/route.ts`(SSE 라우트, `demoActor`로 스코프 계산 후 `realtime.subscribe`), `lib/client/sseRealtimeClient.ts`(`EventSource` 기반 `RealtimeClientPort` 구현), `lib/client/realtimeClientFactory.ts`(SSE 우선/폴링 폴백 선택), 두 파일 모두 Red 테스트(`tests/service-requests-stream-route.test.ts`, `tests/sse-realtime-client.test.ts`) 먼저 작성 후 Green까지 통과시켰다. `lib/server/serviceRequestVisibility.ts`(신규)로 GET 라우트와 SSE 라우트가 공유할 스코프/redaction 로직을 추출했다.
+- **실제로 붙여본 결과 근본적인 구조 결함을 발견했다:** 유닛 테스트는 모두 통과했지만(같은 프로세스 내 fake로 검증하므로), 실제 `npm run dev`로 띄운 서버에 대해 SSE 스트림을 열고 별도 클라이언트로 카드를 생성하는 실측 시나리오에서 이벤트가 전혀 전달되지 않았다. `lib/server/realtime.ts`의 `InMemoryRealtimeAdapter` 싱글턴에 디버그 로그를 임시로 추가해 확인한 결과, `subscribe`가 호출된 모듈 인스턴스(`_debugId: lsy5hv`)와 `publish`가 호출된 모듈 인스턴스(`_debugId: jxz2cj`)가 **서로 달랐다** — Next.js 개발 서버가 App Router 라우트 핸들러를 라우트별로 별도 번들로 컴파일하면서, 모듈 최상위의 `export const realtime = new InMemoryRealtimeAdapter()` 싱글턴이 라우트마다 독립적으로 다시 인스턴스화된 것이다. 이 구조는 개발 서버에서만이 아니라 서버리스/다중 프로세스 배포에서도 동일한 이유로 깨진다 — 프로세스 메모리는 인스턴스 간 공유되지 않는다.
+- 진짜 실시간을 만들려면 프로세스 외부의 공유 소스(Postgres `postgres_changes` 자체, 또는 Redis pub/sub 같은 외부 브로커)에서 이벤트를 받아야 한다는 결론에 이르렀다. 이번 세션에서는 그 작업(Supabase Realtime을 서버가 직접 구독)까지 진행하지 않기로 소유자와 함께 결정했다 — 이미 실제 Supabase Postgres 대상으로 검증된 3초 폴링이 §11.4의 "실시간은 최적화이고 정본은 항상 서버 조회다"를 그대로 만족하기 때문이다.
+- 롤백: `app/api/service-requests/stream/route.ts`, `lib/client/sseRealtimeClient.ts`와 두 테스트 파일을 삭제했다. `lib/client/realtimeClientFactory.ts`는 남기되 항상 `PollingRealtimeClient`를 반환하도록 되돌리고, 이번에 알아낸 내용(라우트별 모듈 인스턴스 분리로 인한 pub/sub 실패)을 주석으로 정확히 남겨 같은 시도를 반복하지 않게 했다. `lib/server/serviceRequestVisibility.ts`의 `getVisibleRequests`(GET 라우트가 계속 씀)는 유지했지만, SSE 전용이었던 `visibleSeniorIdsFor`는 제거했다.
+- 부수적으로 유지한 개선: `RealtimeClientPort` 인터페이스에 `dispose()`를 추가하고 `FamilyDashboard`/`WorkerDashboard`/`SeniorExperience`의 realtime 훅이 `useEffect` cleanup에서 이를 호출하도록 고쳤다 — 이 작업 전에는 세 화면 모두 컴포넌트 unmount 시 폴링 `setInterval`이 전혀 정리되지 않는 실제 메모리 누수가 있었다(SSE 작업과 무관하게 발견해 함께 고쳤다).
+- 검증 명령과 결과:
+  - `npm test -- --run`: 23 test files, 163 tests 통과(SSE 관련 5개 테스트 제거로 168 → 163, dispose 누수 수정에 대한 회귀 없음).
+  - `npm run typecheck` / `npm run lint`: `.next` 캐시를 지운 뒤 오류 없음(캐시에 남아있던 삭제된 라우트의 타입 참조가 한 번 오류로 나왔으나 stale cache였다).
+  - `npm run build`: `/api/service-requests/stream` 라우트가 더 이상 나타나지 않음을 확인(완전히 제거됨).
+  - 실제 dev 서버 대상 재현: SSE 제거 후 별도로 재확인하지 않음 — 폴링은 이전 단위에서 이미 실제 Supabase 대상으로 end-to-end 검증됨.
+  - 테스트 중 생성된 실제 Supabase 행 3개(`60a1b78d...`, `6471eac8...`, `2e9e6fda...`)는 검증 종료 후 모두 삭제했다.
+- 의사결정: 이 실패는 "실시간을 만들 수 없다"가 아니라 "이 특정 접근(프로세스 메모리 pub/sub)으로는 안 된다"는 것이다. 다음 시도가 있다면 Supabase Realtime 클라이언트를 서버 프로세스에서 직접 구독하는 방식(브로커가 Postgres 자체이므로 라우트별 모듈 인스턴스 문제와 무관)이 유력한 후보이며, `service_requests` 테이블이 Supabase publication에 포함되어 있는지 먼저 확인이 필요하다.
+- 알려진 제한/다음 단계: 요청 카드 실시간 동기화는 여전히 3초 폴링이다. 진짜 push 기반 실시간(Supabase Realtime 서버 구독)은 다음 세션 과제로 남긴다.
+- 예정 커밋 메시지: `refactor: SSE 실시간 시도를 폴링으로 되돌리고 dispose 누수 수정`

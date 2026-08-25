@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SpeechControls } from './SpeechControls';
 import { DemoBadge } from './DemoBadge';
 import { StatusPill } from './StatusPill';
 import { statusLabelFor } from '@/lib/domain/policies';
 import type { ServiceRequest, ServiceRequestDraft } from '@/lib/domain/types';
 import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
-import { PollingRealtimeClient } from '@/lib/client/pollingRealtimeClient';
+import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 
 type Step = 'home' | 'listening' | 'confirm' | 'answer' | 'request' | 'emergency' | 'requests' | 'companion' | 'sent';
@@ -20,7 +20,8 @@ async function fetchMyRequests(): Promise<ServiceRequest[]> {
 }
 
 function useSeniorRealtime(): RealtimeClientPort {
-  const [client] = useState(() => new PollingRealtimeClient(fetchMyRequests));
+  const [client] = useState(() => createRealtimeClient(fetchMyRequests));
+  useEffect(() => () => client.dispose(), [client]);
   return client;
 }
 

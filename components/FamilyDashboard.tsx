@@ -1,9 +1,9 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DemoBadge } from './DemoBadge'; import { StatusPill } from './StatusPill';
 import type { ServiceRequest } from '@/lib/domain/types';
 import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
-import { PollingRealtimeClient } from '@/lib/client/pollingRealtimeClient';
+import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 
 /**
@@ -17,7 +17,8 @@ async function fetchFamilyRequests(): Promise<ServiceRequest[]> {
 }
 
 function useFamilyRealtime(): RealtimeClientPort {
-  const [client] = useState(() => new PollingRealtimeClient(fetchFamilyRequests));
+  const [client] = useState(() => createRealtimeClient(fetchFamilyRequests));
+  useEffect(() => () => client.dispose(), [client]);
   return client;
 }
 

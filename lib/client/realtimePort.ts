@@ -12,6 +12,8 @@ export interface RealtimeClientPort {
   subscribe(listener: (event: RealtimeClientEvent) => void): () => void;
   onConnectionChange(listener: (state: RealtimeConnectionState) => void): () => void;
   connectionState(): RealtimeConnectionState;
+  /** 하위 리소스(polling interval 등)를 정리한다. 컴포넌트 unmount 시 반드시 호출한다. */
+  dispose(): void;
 }
 
 /** 테스트와 데모에서 쓰는 in-memory fake — 서버를 거치지 않고 즉시 이벤트를 전달한다. */
@@ -44,5 +46,10 @@ export class FakeRealtimeClient implements RealtimeClientPort {
     if (this.state === state) return;
     this.state = state;
     for (const listener of this.connectionListeners) listener(state);
+  }
+
+  dispose(): void {
+    this.listeners.clear();
+    this.connectionListeners.clear();
   }
 }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requestDetailsSchema, requestInputTypeSchema, requestTypeSchema } from '@/lib/domain/types';
-import { redactForRole } from '@/lib/domain/policies';
 import { demoActor } from '@/lib/server/auth';
-import { demoSeniorId, demoWorkerId, seniorIdsAssignedTo, serviceRequests } from '@/lib/server/store';
+import { demoSeniorId, serviceRequests } from '@/lib/server/store';
+import { getVisibleRequests } from '@/lib/server/serviceRequestVisibility';
 
 const createSchema = z.object({
   type: requestTypeSchema,
@@ -31,13 +31,6 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   const actor = demoActor(request);
-  const all = await serviceRequests.list();
-  const scoped = actor.role === 'senior'
-    ? await serviceRequests.listForSenior(actor.id)
-    : actor.role === 'worker'
-      ? all.filter((row) => seniorIdsAssignedTo(actor.id).includes(row.seniorId))
-      : all.filter((row) => seniorIdsAssignedTo(demoWorkerId).includes(row.seniorId) || row.seniorId === demoSeniorId);
-  // 가족 화면에는 별도 동의(transcriptConsent) 없이는 원문을 노출하지 않는다.
-  const data = scoped.map((row) => redactForRole(row, actor.role, { transcriptConsent: false }));
+  const data = await getVisibleRequests(actor);
   return NextResponse.json({ data, is_demo: true });
 }

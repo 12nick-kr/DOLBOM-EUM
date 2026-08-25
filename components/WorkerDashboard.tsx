@@ -1,10 +1,10 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DemoBadge } from './DemoBadge'; import { StatusPill } from './StatusPill';
 import { statusLabelFor } from '@/lib/domain/policies';
 import type { ServiceRequest } from '@/lib/domain/types';
 import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
-import { PollingRealtimeClient } from '@/lib/client/pollingRealtimeClient';
+import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 
 const typeLabel: Record<string, string> = { hospital_escort: '병원동행 요청', welfare_info: '복지 정보 안내', daily_help: '일상 도움 요청' };
@@ -16,7 +16,8 @@ async function fetchServiceRequests(): Promise<ServiceRequest[]> {
 }
 
 function useWorkerRealtime(): RealtimeClientPort {
-  const [client] = useState(() => new PollingRealtimeClient(fetchServiceRequests));
+  const [client] = useState(() => createRealtimeClient(fetchServiceRequests));
+  useEffect(() => () => client.dispose(), [client]);
   return client;
 }
 
