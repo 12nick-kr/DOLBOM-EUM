@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { persistedRequestStatusSchema } from '@/lib/domain/types';
 import { authenticatedActor } from '@/lib/server/auth';
-import { seniorInputs, seniorIdsAssignedTo, serviceRequests } from '@/lib/server/store';
+import { careRelationships, seniorInputs, serviceRequests } from '@/lib/server/store';
 
 const patchSchema = z.object({
   status: persistedRequestStatusSchema,
@@ -21,7 +21,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { id } = await context.params;
   const existing = await serviceRequests.get(id);
   if (!existing) return NextResponse.json({ error: '요청을 찾을 수 없어요.' }, { status: 404 });
-  if (!seniorIdsAssignedTo(actor.id).includes(existing.seniorId)) return NextResponse.json({ error: '담당 관계가 없는 요청은 변경할 수 없어요.' }, { status: 403 });
+  if (!(await careRelationships.seniorIdsForMember(actor.id, 'worker')).includes(existing.seniorId)) return NextResponse.json({ error: '담당 관계가 없는 요청은 변경할 수 없어요.' }, { status: 403 });
   const parsed = patchSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '요청 내용을 확인해 주세요.' }, { status: 400 });
   try {
@@ -40,7 +40,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const { id } = await context.params;
   const existing = await serviceRequests.get(id);
   if (!existing) return NextResponse.json({ error: '요청을 찾을 수 없어요.' }, { status: 404 });
-  if (!seniorIdsAssignedTo(actor.id).includes(existing.seniorId)) {
+  if (!(await careRelationships.seniorIdsForMember(actor.id, 'worker')).includes(existing.seniorId)) {
     return NextResponse.json({ error: '담당 관계가 없는 요청은 삭제할 수 없어요.' }, { status: 403 });
   }
   try {

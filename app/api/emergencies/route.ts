@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticatedActor } from '@/lib/server/auth';
-import { demoFamilyId, demoSeniorId, emergencyEvents, emergencyEventsProvider, seniorIdsAssignedTo } from '@/lib/server/store';
+import { careRelationships, emergencyEvents, emergencyEventsProvider } from '@/lib/server/store';
 export async function POST(request: NextRequest) {
   const actor = await authenticatedActor(request);
   if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
@@ -15,10 +15,9 @@ export async function GET(request: NextRequest) {
   const actor = await authenticatedActor(request);
   if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
   const all = await emergencyEvents.list();
+  const linkedSeniorIds = actor.role === 'senior' ? [] : await careRelationships.seniorIdsForMember(actor.id, actor.role);
   const data = actor.role === 'senior'
     ? all.filter((event) => event.seniorId === actor.id)
-    : actor.role === 'worker'
-      ? all.filter((event) => seniorIdsAssignedTo(actor.id).includes(event.seniorId))
-      : all.filter((event) => actor.id === demoFamilyId && event.seniorId === demoSeniorId);
+    : all.filter((event) => linkedSeniorIds.includes(event.seniorId));
   return NextResponse.json({ data, is_demo: emergencyEventsProvider === 'in-memory' });
 }

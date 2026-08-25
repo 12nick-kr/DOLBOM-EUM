@@ -9,13 +9,15 @@ import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
 import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 import { useEmergencyList } from '@/lib/client/useEmergencyList';
+import { CareConnectionManager } from './CareConnectionManager';
+import { LogoutButton } from './LogoutButton';
 
 const typeLabel: Record<ServiceRequest['type'], string> = { hospital_escort: '병원동행 요청', welfare_info: '복지 정보 안내', daily_help: '일상 도움 요청' };
 async function fetchServiceRequests(): Promise<ServiceRequest[]> { const response = await fetch('/api/care-cards'); if (response.ok === false) throw new Error('요청 목록 조회 실패'); const body = await response.json(); return Array.isArray(body.data) ? body.data : []; }
 function useWorkerRealtime(): RealtimeClientPort { const [client] = useState(() => createRealtimeClient(fetchServiceRequests)); useEffect(() => () => client.dispose(), [client]); return client; }
 
 export function WorkerDashboard() {
-  const [page, setPage] = useState<'dashboard' | 'inbox' | 'case' | 'request'>('dashboard');
+  const [page, setPage] = useState<'dashboard' | 'inbox' | 'case' | 'request' | 'management'>('dashboard');
   const [filter, setFilter] = useState('전체');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { emergencies } = useEmergencyList();
@@ -52,7 +54,7 @@ export function WorkerDashboard() {
   };
 
   return <main className="worker-layout">
-    <aside><div className="brand">돌봄이음 <em>AI</em></div><nav><button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>▦ 대시보드</button><button className={page === 'inbox' || page === 'request' ? 'active' : ''} onClick={() => setPage('inbox')}>☷ 요청 업무함</button><button className={page === 'case' ? 'active' : ''} onClick={() => setPage('case')}>◉ 사례 관리</button></nav><div className="institution"><b>충남 돌봄복지관</b><span>박사회복지사</span></div></aside>
+    <aside><div className="brand">돌봄이음 <em>AI</em></div><nav><button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>▦ 대시보드</button><button className={page === 'inbox' || page === 'request' ? 'active' : ''} onClick={() => setPage('inbox')}>☷ 요청 업무함</button><button className={page === 'case' ? 'active' : ''} onClick={() => setPage('case')}>◉ 사례 관리</button><button className={page === 'management' ? 'active' : ''} onClick={() => setPage('management')}>⌘ 연결 관리</button></nav><div className="institution"><b>충남 돌봄복지관</b><span>사회복지사 계정</span><LogoutButton className="sidebar-logout" /></div></aside>
     <section className="worker-content"><DemoBadge />
       {connectionState === 'disconnected' && <p className="notice" role="status">실시간 연결이 끊겼어요. 마지막 목록을 유지하며 재연결 중이에요.</p>}
       {deleteError && <p className="notice error-notice" role="alert">{deleteError}</p>}
@@ -60,6 +62,7 @@ export function WorkerDashboard() {
       {page === 'inbox' && <><header className="worker-header"><h1>요청 업무함</h1><span className="pill blue" aria-live="polite">신규 {unreadCount}건</span></header><div className="filter-tabs">{['전체', '신규', '진행중', '완료'].map((item) => <button onClick={() => setFilter(item)} className={filter === item ? 'selected' : ''} key={item}>{item}</button>)}</div><div className="care-card-feed">{isLoading && <p className="notice" role="status">요청을 불러오는 중이에요.</p>}{!isLoading && filtered.length === 0 && <p className="notice">아직 요청이 없어요.</p>}{filtered.map((item) => <CareRequestCard card={item} role="worker" unread={isUnread(item.id)} key={item.id} onSelect={() => openRequest(item.id)} onDelete={askDelete} deleting={deletingId === item.id} />)}</div></>}
       {page === 'case' && <><button className="back" onClick={() => setPage('dashboard')}>‹ 대시보드</button><header className="case-header"><div className="profile">김</div><div><StatusPill status={latestEmergency?.status === 'detected' ? '긴급' : '담당 사례'} /><h1>김순자 어르신</h1><p>담당: 박사회복지사 · 요청 {requests.length}건</p></div></header>{latestEmergency && <section className="card"><h2>최근 긴급 현황</h2><p>{latestEmergency.utterance}</p><p>{latestEmergency.location} · {new Date(latestEmergency.createdAt).toLocaleString('ko-KR')}</p></section>}<section className="care-card-feed">{requests.map((item) => <CareRequestCard card={item} role="worker" key={item.id} onSelect={() => openRequest(item.id)} onDelete={askDelete} deleting={deletingId === item.id} />)}</section></>}
       {page === 'request' && selected && <><button className="back" onClick={() => setPage('inbox')}>‹ 요청 업무함</button><header className="worker-header"><div><StatusPill status={statusLabelFor('worker', selected.status)} /><h1>{typeLabel[selected.type]}</h1></div></header><CareRequestCard card={selected} role="worker" onDelete={askDelete} deleting={deletingId === selected.id} /><section className="request-detail"><div className="card"><p className="ai-pill">🤖 AI 신청 초안</p><h2>노인맞춤돌봄서비스 연계 검토</h2><p>대상 조건은 담당자가 확인해야 해요.</p></div><label className="memo"><span>담당자 메모</span><textarea placeholder="확인한 사실만 기록해 주세요." /></label></section><div className="case-actions"><button>정보 확인 요청</button>{selected.status === 'new' && <button className="primary" onClick={() => takeCharge(selected.id)}>담당 맡기</button>}</div></>}
+      {page === 'management' && <CareConnectionManager />}
     </section>
     {deleteTarget && <div className="modal-backdrop" role="presentation"><section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-request-title"><h2 id="delete-request-title">이 요청을 삭제할까요?</h2><p>{deleteTarget.summary}</p><p className="notice">서버의 요청 카드와 연결된 노인 입력 JSON이 함께 삭제돼요.</p><div className="confirm-actions"><button onClick={() => setDeleteTarget(null)}>취소</button><button className="danger" onClick={confirmDelete}>삭제</button></div></section></div>}
   </main>;

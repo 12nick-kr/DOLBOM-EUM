@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { emergencyEvents } from '@/lib/server/store';
+import { careRelationships, emergencyEvents } from '@/lib/server/store';
 import { authenticatedActor } from '@/lib/server/auth';
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const actor = await authenticatedActor(request);
@@ -18,6 +18,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (event.seniorId !== actor.id || parsed.data.status !== 'closed' || !parsed.data.closeReason) {
       return NextResponse.json({ error: '본인의 긴급 상황 종료만 처리할 수 있어요.' }, { status: 403 });
     }
+  } else if (actor.role === 'family') {
+    return NextResponse.json({ error: '부양가족 계정은 긴급 현황을 열람만 할 수 있어요.' }, { status: 403 });
+  } else if (!(await careRelationships.seniorIdsForMember(actor.id, 'worker')).includes(event.seniorId)) {
+    return NextResponse.json({ error: '담당 관계가 없는 긴급 상황은 변경할 수 없어요.' }, { status: 403 });
   }
   const updated = await emergencyEvents.update(id, {
     status: parsed.data.status,

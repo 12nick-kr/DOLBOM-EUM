@@ -34,17 +34,11 @@ describe('PATCH /api/emergencies/:id appends an audited action for every status 
     expect(body.actions.at(-1)).toMatchObject({ actor: 'senior', action: '어르신이 긴급 상황을 종료했어요.' });
   });
 
-  it('records actor, action, and timestamp for a family acknowledgement', async () => {
+  it('keeps family accounts read-only for emergency events', async () => {
     const { PATCH } = await import('@/app/api/emergencies/[id]/route');
     const req = new NextRequest('http://localhost:3000/api/emergencies/emergency-demo-001', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-demo-role': 'family' }, body: JSON.stringify({ actor: 'family', status: 'family_acknowledged', action: '가족이 확인했어요.' }) });
     const res = await PATCH(req, { params: Promise.resolve({ id: 'emergency-demo-001' }) });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe('family_acknowledged');
-    const lastAction = body.actions[body.actions.length - 1];
-    expect(lastAction.actor).toBe('family');
-    expect(lastAction.action).toBe('가족이 확인했어요.');
-    expect(lastAction.at).toBeTruthy();
+    expect(res.status).toBe(403);
   });
 
   it('returns 404 for an unknown emergency id instead of silently succeeding', async () => {

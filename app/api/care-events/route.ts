@@ -2,7 +2,7 @@ import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { authenticatedActor, type AuthActor } from '@/lib/server/auth';
 import { getVisibleRequest } from '@/lib/server/serviceRequestVisibility';
-import { demoFamilyId, demoSeniorId, emergencyEvents, seniorIdsAssignedTo } from '@/lib/server/store';
+import { careRelationships, emergencyEvents } from '@/lib/server/store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -10,11 +10,10 @@ export const runtime = 'nodejs';
 const encoder = new TextEncoder();
 const encode = (value: unknown) => encoder.encode(`data: ${JSON.stringify(value)}\n\n`);
 
-function canSeeSenior(actor: AuthActor, seniorId?: string): boolean {
+async function canSeeSenior(actor: AuthActor, seniorId?: string): Promise<boolean> {
   if (!seniorId) return false;
   if (actor.role === 'senior') return actor.id === seniorId;
-  if (actor.role === 'worker') return seniorIdsAssignedTo(actor.id).includes(seniorId);
-  return actor.id === demoFamilyId && seniorId === demoSeniorId;
+  return (await careRelationships.seniorIdsForMember(actor.id, actor.role)).includes(seniorId);
 }
 
 /** Supabase 변경을 역할별 안전 이벤트로 바꿔 전달한다. 원본 테이블 payload는 브라우저에 노출하지 않는다. */
@@ -45,7 +44,7 @@ export async function GET(request: NextRequest) {
           const changed = (payload.eventType === 'DELETE' ? payload.old : payload.new) as { id?: string; senior_id?: string };
           if (!changed.id) return;
           if (payload.eventType === 'DELETE') {
-            if (canSeeSenior(actor, changed.senior_id)) send({ resource: 'service_request', type: 'delete', id: changed.id, deletedAt: new Date().toISOString() });
+            if (await canSeeSenior(actor, changed.senior_id)) send({ resource: 'service_request', type: 'delete', id: changed.id, deletedAt: new Date().toISOString() });
             return;
           }
           const visible = await getVisibleRequest(actor, changed.id);
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest) {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_events' }, async (payload) => {
           const changed = (payload.eventType === 'DELETE' ? payload.old : payload.new) as { id?: string; senior_id?: string };
-          if (!changed.id || !canSeeSenior(actor, changed.senior_id)) return;
+          if (!changed.id || !(await canSeeSenior(actor, changed.senior_id))) return;
           if (payload.eventType !== 'DELETE' && !(await emergencyEvents.get(changed.id))) return;
           send({ resource: 'emergency', type: payload.eventType.toLowerCase(), id: changed.id });
         })
