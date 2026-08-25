@@ -42,7 +42,7 @@ describe('chat use case — text and voice share one structure (PRD FR-04, FR-07
     const second = await respondToUtterance({ text: '잘 모르겠어요.', seniorId: 'senior-1', inputType: 'voice', priorDraft: first.draft! });
     expect(second.draft?.missingFields).not.toContain('희망 날짜');
     expect(second.draft?.details.dateResolution).toBe('needs_coordination');
-    expect(second.assistant_text).toContain('보내시겠습니까');
+    expect(second.assistant_text).toContain('보내드릴까요');
   });
 
   it('does not persist anything server-side merely by producing a draft', async () => {

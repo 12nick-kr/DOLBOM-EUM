@@ -5,6 +5,7 @@ import { respondToUtterance } from '@/lib/server/chatUseCase';
 import { selectAiPort } from '@/lib/server/aiFactory';
 import { createAssistantTurnToken } from '@/lib/server/assistantTurnToken';
 import { authenticatedActor } from '@/lib/server/auth';
+import { classifyUrgency } from '@/lib/domain/urgency';
 
 const priorDraftSchema = z.object({
   seniorId: z.string(),
@@ -37,7 +38,16 @@ export async function POST(request: NextRequest) {
       seniorId: actor.id,
       priorDraft: parsed.data.priorDraft ? { ...parsed.data.priorDraft, seniorId: actor.id } : undefined,
     };
-    const turn = await respondToUtterance(input, ai);
+    const generatedTurn = await respondToUtterance(input, ai);
+    const hardGate = classifyUrgency(parsed.data.text);
+    const turn = hardGate.urgency === 'emergency'
+      ? {
+          ...generatedTurn,
+          ...hardGate,
+          assistant_text: '긴급 도움 화면을 열었어요.',
+          draft: undefined,
+        }
+      : generatedTurn;
     const speech_token = createAssistantTurnToken({ id: turn.id, seniorId: turn.seniorId, text: turn.assistant_text });
     return NextResponse.json({ ...turn, speech_token, is_demo: provider === 'fixture' });
   } catch {
