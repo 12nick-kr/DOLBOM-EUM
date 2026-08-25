@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticatedActor } from '@/lib/server/auth';
 import { careRelationships, emergencyEvents, emergencyEventsProvider } from '@/lib/server/store';
+import { isRateLimited } from '@/lib/server/rateLimit';
+
+const EMERGENCY_COOLDOWN_LIMIT = 3;
+const EMERGENCY_COOLDOWN_WINDOW_MS = 60 * 1000;
+
 export async function POST(request: NextRequest) {
   const actor = await authenticatedActor(request);
   if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
   if (actor.role !== 'senior') return NextResponse.json({ error: '노인 본인만 긴급 알림을 만들 수 있어요.' }, { status: 403 });
   const parsed = z.object({ utterance: z.string().min(1), location: z.string().default('위치 정보 없음'), confirmed: z.literal(true) }).safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '긴급 알림은 본인 확인 후에만 만들 수 있어요.' }, { status: 400 });
+  if (isRateLimited(`emergency:${actor.id}`, EMERGENCY_COOLDOWN_LIMIT, EMERGENCY_COOLDOWN_WINDOW_MS)) {
+    return NextResponse.json({ error: '잠시 후 다시 시도해 주세요.' }, { status: 429 });
+  }
   const event = await emergencyEvents.create({ seniorId: actor.id, utterance: parsed.data.utterance, location: parsed.data.location });
   return NextResponse.json({ ...event, is_demo: emergencyEventsProvider === 'in-memory' }, { status: 201 });
 }

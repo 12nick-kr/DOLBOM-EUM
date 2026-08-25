@@ -3,12 +3,19 @@ import { loginIdToInternalEmail, loginSchema } from '@/lib/auth/credentials';
 import { demoSessionCookie, signDemoSession } from '@/lib/auth/sessionToken';
 import { authenticateDemoAccount } from '@/lib/server/accountStore';
 import { createSupabaseResponseClient, hasSupabaseAuthEnvironment } from '@/lib/server/supabaseAuth';
+import { clientIp, isRateLimited } from '@/lib/server/rateLimit';
+
+const LOGIN_ATTEMPT_LIMIT = 10;
+const LOGIN_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   const parsed = loginSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '전화번호형 아이디와 숫자 6자리 비밀번호를 확인해 주세요.' }, { status: 400 });
 
   const { loginId, pin } = parsed.data;
+  if (isRateLimited(`login:${clientIp(request)}:${loginId}`, LOGIN_ATTEMPT_LIMIT, LOGIN_ATTEMPT_WINDOW_MS)) {
+    return NextResponse.json({ error: '로그인 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' }, { status: 429 });
+  }
   if (hasSupabaseAuthEnvironment()) {
     const response = NextResponse.json({ redirectTo: '/' });
     const client = createSupabaseResponseClient(request, response);
