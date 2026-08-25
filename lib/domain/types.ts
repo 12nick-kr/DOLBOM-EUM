@@ -102,6 +102,7 @@ export const serviceRequestSchema = z.object({
   scheduleTimezone: z.literal('Asia/Seoul').optional(),
   completedAt: z.string().nullable().optional(),
   completedBy: z.string().nullable().optional(),
+  memo: z.string().max(500).nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

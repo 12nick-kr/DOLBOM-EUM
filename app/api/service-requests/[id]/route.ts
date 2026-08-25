@@ -4,9 +4,9 @@ import { authenticatedActor } from '@/lib/server/auth';
 import { careRelationships, seniorInputs, serviceRequests } from '@/lib/server/store';
 
 const patchSchema = z.object({
-  status: z.literal('in_progress'),
+  status: z.literal('in_progress').optional(),
   memo: z.string().max(500).optional(),
-});
+}).refine((data) => data.status !== undefined || data.memo !== undefined, { message: 'status 또는 memo 중 하나는 있어야 해요.' });
 
 /**
  * 상태 전이는 담당 복지사만 수행한다(PRD §7.4 "new → in_progress → done은 담당 복지사만 수행한다").
@@ -24,7 +24,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const parsed = patchSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '요청 내용을 확인해 주세요.' }, { status: 400 });
   try {
-    const updated = await serviceRequests.transition(id, parsed.data.status, { assigneeId: actor.id });
+    const updated = parsed.data.status
+      ? await serviceRequests.transition(id, parsed.data.status, { assigneeId: actor.id })
+      : await serviceRequests.updateMemo(id, parsed.data.memo ?? '');
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: '허용되지 않은 상태 변경이에요.' }, { status: 400 });

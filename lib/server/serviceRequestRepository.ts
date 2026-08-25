@@ -31,6 +31,7 @@ export interface ServiceRequestRepository {
   create(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): Promise<ServiceRequest>;
   complete(id: string, workerId: string): Promise<ServiceRequest>;
+  updateMemo(id: string, memo: string): Promise<ServiceRequest>;
   acknowledge(id: string, workerId: string): Promise<ServiceRequest>;
   cancel(id: string, actor: Role): Promise<ServiceRequest>;
   delete(id: string, actorId: string): Promise<ServiceRequest>;
@@ -137,6 +138,15 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     row.completedAt = now;
     row.completedBy = workerId;
     row.updatedAt = now;
+    this.emit({ type: 'update', request: row });
+    return row;
+  }
+
+  async updateMemo(id: string, memo: string): Promise<ServiceRequest> {
+    const row = this.rows.find((item) => item.id === id);
+    if (!row) throw new Error('요청을 찾을 수 없습니다.');
+    row.memo = memo;
+    row.updatedAt = new Date().toISOString();
     this.emit({ type: 'update', request: row });
     return row;
   }

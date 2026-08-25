@@ -53,7 +53,7 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${seedCard.id}`, { method: 'DELETE' });
   });
 
-  it('shows the complete action only for in-progress cards and calls the dedicated endpoint', async () => {
+  it('enables only the 완료 status button for in-progress cards and calls the dedicated endpoint', async () => {
     const inProgress = { ...seedCard, status: 'in_progress', assigneeId: 'worker-demo-001' };
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [inProgress] }) };
@@ -64,10 +64,34 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     vi.stubGlobal('fetch', fetchMock);
     render(<WorkerDashboard />);
     fireEvent.click(screen.getByRole('button', { name: /요청 업무함/ }));
+    const card = (await screen.findByText(inProgress.summary)).closest('article') as HTMLElement;
+    const inboxCompleteButton = within(card).getByRole('button', { name: '완료' });
+    expect(inboxCompleteButton).toBeEnabled();
+    expect(within(card).getByRole('button', { name: '진행중' })).toBeDisabled();
+    fireEvent.click(inboxCompleteButton);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${inProgress.id}/complete`, { method: 'POST' }));
+  });
+
+  it('lets a worker edit and save a case memo from the request detail page', async () => {
+    const inProgress = { ...seedCard, status: 'in_progress', assigneeId: 'worker-demo-001' };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [inProgress] }) };
+      if (url === '/api/emergencies') return { ok: true, json: async () => ({ data: [] }) };
+      if (url === `/api/service-requests/${inProgress.id}` && init?.method === 'PATCH') return { ok: true, json: async () => ({ ...inProgress, memo: '메모 내용', updatedAt: '2026-08-26T00:00:00Z' }) };
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<WorkerDashboard />);
+    fireEvent.click(screen.getByRole('button', { name: /요청 업무함/ }));
     await screen.findByText(inProgress.summary);
     fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
-    fireEvent.click(screen.getByRole('button', { name: '처리 완료' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${inProgress.id}/complete`, { method: 'POST' }));
+    fireEvent.click(await screen.findByRole('button', { name: '수정' }));
+    fireEvent.change(screen.getByPlaceholderText('확인한 사실만 기록해 주세요.'), { target: { value: '메모 내용' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${inProgress.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memo: '메모 내용' }),
+    }));
+    expect(await screen.findByText('메모 내용')).toBeVisible();
   });
 
   it('optimistically removes an emergency after the assigned worker confirms hard delete', async () => {
