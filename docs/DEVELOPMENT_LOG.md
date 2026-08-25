@@ -315,3 +315,24 @@
 - 의사결정: PATCH에서 `assigneeId`를 body 스키마에서 완전히 제거하는 대신 "받되 무시"하는 선택지도 있었지만, 그러면 클라이언트가 여전히 그 필드를 보낼 수 있다는 오해를 남긴다고 판단해 스키마 자체에서 제거했다 — 필드가 없으면 실수로도 신뢰할 수 없다. 이 PATCH 인증은 여전히 `demoActor`(쿠키/헤더 기반 자리표시자)에 의존한다 — 실제 Supabase Auth 전환 전까지는 근본적인 한계이며, RLS의 `service_requests_update_assigned_worker` 정책이 `auth.uid()`를 검사하도록 되어 있어도 지금은 `SUPABASE_SECRET_KEY`(RLS 우회)로 접속하므로 이 애플리케이션 레벨 검사가 유일한 방어선이다.
 - 알려진 제한/다음 단계: 실제 Supabase Auth가 붙기 전까지 이 저장소의 모든 권한 검사(role, 소유권)는 `demoActor`의 쿠키/헤더 값을 그대로 신뢰한다 — 쿠키 위조 방지는 세션 서명/HttpOnly 속성에 의존하며 별도의 실 사용자 인증은 아니다. 이는 이번 단위의 범위가 아니었고 PRD §11.5/§16의 "일반 요청은 사용자 JWT + RLS로 처리" 목표로 가는 중간 단계로 문서화해 둔다.
 - 예정 커밋 메시지: `fix: 실제 배포 대비 데모 UUID 교정과 요청 상태 변경 권한 검증 추가`
+
+## 2026-08-25 — 실제 Supabase 프로젝트 대상 첫 E2E 검증 (§14.2)
+
+- 목표: 소유자가 `0001_demo_schema.sql`과 `0002_seed_demo_profiles.sql`을 실제 Supabase 프로젝트의 SQL Editor에서 직접 실행했다고 확인해와, 요청 카드 등록→복지사 업무함 반영→가족 조회의 전체 수직 흐름을 **실제 DB**를 대상으로 처음 검증한다. PRD §14.2 "Supabase는 프로젝트 키가 설정된 뒤 실행한다"의 실행 시점이다.
+- PRD 요구사항: §11.5(실제 연동 전환 정책), §7.4(요청 카드 모델과 역할별 조회 범위), FR-08(실시간 동기화 — 여기서는 폴링 없이 동기 조회만으로 "즉시 반영"을 확인), §16(가족에게 transcript 비노출).
+- 검증 절차와 결과 (모두 dev 서버 대상 실제 HTTP 호출, `node -e`의 `fetch`로 실행 — Git Bash `curl`은 한글 payload를 깨뜨려 사용하지 않음):
+  1. 원시 REST 호출로 6개 테이블(`profiles`, `care_relationships`, `consent_grants`, `service_requests`, `emergency_events`, `audit_logs`) 모두 존재 확인, `profiles` 3행이 `lib/server/store.ts`의 UUID 세 개와 정확히 일치함을 확인.
+  2. `POST /api/service-requests`(senior)로 실제 카드 생성 → `201`, 실제 UUID와 실제 Postgres `created_at` 반환.
+  3. `GET /api/service-requests`(worker)에서 별도 등록 없이 방금 만든 카드가 즉시 조회됨을 확인 — "복지사 업무함에 그 즉시 요청사항이 떠야 함" 요구사항을 실제 DB로 충족.
+  4. `GET /api/service-requests`(family)에서 같은 카드가 보이되 `transcript` 필드가 없음을 확인(§16 비노출 규칙).
+  5. 같은 `idempotencyKey`로 재전송 → 새 행 대신 기존 행과 동일한 `id` 반환(실제 Postgres `unique (senior_id, idempotency_key)` 제약 경유, in-memory 테스트가 아닌 실제 DB 유니크 제약으로 방어됨을 확인).
+  6. `PATCH .../:id`를 senior로 시도 → `403`(직전 단위에서 추가한 워커 전용 검증이 실제 배포 조건에서도 동작). worker로 시도 → `200`, `assigneeId`가 클라이언트 입력과 무관하게 인증된 워커 UUID로 자동 설정됨을 확인.
+  7. 검증에 사용한 두 카드는 `DELETE .../rest/v1/service_requests?id=in.(...)`로 완전히 삭제해 실제 프로젝트에 테스트 데이터를 남기지 않았다(재조회로 빈 배열 확인).
+  8. `npx tsx scripts/smoke-openai.ts` 재실행 — `{"responses":"pass","transcription":"pass","speech":"pass"}` 유지.
+- 검증 명령과 결과:
+  - `npm test -- --run`: 23 test files, 163 tests 통과(회귀 없음).
+  - `npm run typecheck` / `npm run lint`: 오류 없음.
+- 발견한 사소한 항목(결함 아님, 다음 정리 후보): idempotency 재전송이 기존 행을 반환하면서도 HTTP status가 `200`이 아니라 신규 생성과 동일한 `201`을 반환한다 — 기능적으로는 올바르지만(같은 id, 중복 생성 없음) 관례상으로는 재전송 시 `200`이 더 정확하다. 저장소가 "새로 만들었는지/기존 것을 반환했는지"를 라우트에 알려주는 인터페이스 변경이 필요해 이번 단위에서는 손대지 않고 기록만 남긴다.
+- 의사결정: 이 시점부로 PRD §14 표의 Supabase 행 판정을 `현재 구성 불가`에서 `실행 확인`으로 승격할 근거가 마련됐다(다음 PRD 편집에서 반영). 요청 카드 등록→업무함 반영→가족 조회의 핵심 수직 흐름이 이제 실제 OpenAI API와 실제 Supabase Postgres 양쪽 모두로 end-to-end 검증됐다 — 남은 것은 브라우저 UI를 통한 수동 확인과 Realtime(현재는 폴링) 채널 업그레이드다.
+- 알려진 제한/다음 단계: 이번 검증은 서버 API를 직접 호출한 것이며, 실제 브라우저에서 노인 화면의 마이크 녹음 → 전사 → 초안 확인 → 등록까지 전체 UI 흐름을 사람이 눈으로 확인하지는 않았다. `PollingRealtimeClient`의 3초 폴링이 실제 Supabase 백엔드로도 문제없이 동작하는지도 API 레벨에서는 확인됐지만 브라우저 탭 두 개를 동시에 띄운 시각적 확인은 아직 하지 않았다.
+- 예정 커밋 메시지: (코드 변경 없음 — 검증 기록만 dev log에 추가)
