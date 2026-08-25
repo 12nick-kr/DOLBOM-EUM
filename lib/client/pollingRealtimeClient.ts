@@ -17,7 +17,7 @@ export class PollingRealtimeClient implements RealtimeClientPort {
   private immediateTimer: ReturnType<typeof setTimeout> | null = null;
   private active = true;
 
-  constructor(private fetchList: () => Promise<ServiceRequest[]>, private intervalMs = 1000) {
+  constructor(private fetchList: () => Promise<ServiceRequest[]>, private intervalMs = 5000) {
     this.start();
   }
 

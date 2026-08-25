@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { SpeechControls } from './SpeechControls';
 import { DemoBadge } from './DemoBadge';
+import { LogoutButton } from './LogoutButton';
 import type { RequestInputType, ServiceRequest, ServiceRequestDraft } from '@/lib/domain/types';
 import { formatDesiredDate } from '@/lib/domain/dateResolution';
 import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
@@ -474,7 +475,7 @@ export function SeniorExperience() {
 
   return <main className="senior-shell" data-density="comfort">
     <DemoBadge />
-    <header className="senior-header"><span>돌봄이음 AI</span><strong>오전 10:15</strong></header>
+    <header className="senior-header"><span>돌봄이음 AI</span><div className="session-actions"><strong>오전 10:15</strong><LogoutButton className="header-logout" /></div></header>
     {screen.view === 'home' && <section className="senior-home"><p>김순자님,</p><h1>무엇을 도와드릴까요?</h1><button className="talk-button" onClick={() => void startRecording('request')} aria-label="말하기 시작">🎙️<small>눌러서 말하기</small></button><label className="sr-only" htmlFor="senior-text">도움 요청 입력</label><div className="text-entry"><input id="senior-text" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitTextInput(); }} /><button onClick={submitTextInput}>보내기</button></div><div className="two-actions"><button onClick={() => dispatch({ type: 'REQUESTS' })}>📋 내 요청 보기</button><button onClick={() => dispatch({ type: 'INFO' })}>💙 복지 정보</button></div></section>}
     {screen.view === 'listening' && <section className="senior-center" aria-live="polite"><p className={screen.phase === 'recording' ? 'recording' : 'eyebrow'}>{screen.phase === 'recording' ? '● 녹음 중' : screen.phase === 'transcribing' ? '음성을 글로 바꾸는 중' : '마이크 준비 중'}</p><h1>{screen.phase === 'recording' ? '말씀해 주세요' : screen.phase === 'transcribing' ? 'AI가 바로 정리하고 있어요' : '마이크를 준비하고 있어요'}</h1><div className="wave" aria-label="음성 파형"><i /><i /><i /><i /><i /></div>{screen.phase === 'recording' ? <><p className="notice">말씀이 끝난 뒤 3초가 지나면 자동으로 멈춰요.</p><button className="primary large" onClick={stopRecording}>지금 녹음 마치기</button></> : <p className="notice" role="status">{screen.phase === 'transcribing' ? '음성을 글로 바꾼 뒤 자동으로 분석해요.' : '곧 녹음이 시작돼요.'}</p>}<button className="secondary large" onClick={() => cancelRecording(true)}>취소</button></section>}
     {screen.view === 'analyzing' && <section className="senior-center analysis-progress" aria-live="polite"><p className="eyebrow">자동 분석 중</p><h1>AI가 신청 내용을<br />정리하고 있어요.</h1><div className="analysis-dots" aria-hidden="true"><i /><i /><i /></div><p className="notice" role="status">AI가 신청 내용을 정리하고 있어요.</p></section>}

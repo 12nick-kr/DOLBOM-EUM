@@ -9,7 +9,7 @@ async function fetchEmergencies(): Promise<EmergencyEvent[]> {
   return Array.isArray(body.data) ? body.data : [];
 }
 
-/** Realtime 신호면 즉시 갱신하고, 긴급 publication 누락에도 멈추지 않도록 1초 정본 조회를 유지한다. */
+/** Realtime 신호면 즉시 갱신하고, 긴급 publication 누락에도 멈추지 않도록 5초 정본 조회를 유지한다. */
 export function useEmergencyList() {
   const [emergencies, setEmergencies] = useState<EmergencyEvent[]>([]);
   const load = useCallback(async () => {
@@ -26,7 +26,7 @@ export function useEmergencyList() {
 
   useEffect(() => {
     void load();
-    const timer = setInterval(() => { void load(); }, 1000);
+    const timer = setInterval(() => { void load(); }, 5000);
     return () => clearInterval(timer);
   }, [load]);
 

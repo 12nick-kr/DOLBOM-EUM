@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { requestDetailsSchema, requestInputTypeSchema } from '@/lib/domain/types';
 import { respondToUtterance } from '@/lib/server/chatUseCase';
 import { selectAiPort } from '@/lib/server/aiFactory';
-import { demoSeniorId } from '@/lib/server/store';
 import { createAssistantTurnToken } from '@/lib/server/assistantTurnToken';
+import { authenticatedActor } from '@/lib/server/auth';
 
 const priorDraftSchema = z.object({
   seniorId: z.string(),
@@ -18,18 +18,26 @@ const priorDraftSchema = z.object({
 
 const bodySchema = z.object({
   text: z.string().min(1).max(1000),
-  seniorId: z.string().default(demoSeniorId),
+  seniorId: z.string().optional(),
   inputType: requestInputTypeSchema.default('text'),
   purpose: z.enum(['conversation', 'service_request']).default('conversation'),
   priorDraft: priorDraftSchema.optional(),
 });
 
 export async function POST(request: NextRequest) {
+  const actor = await authenticatedActor(request);
+  if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
+  if (actor.role !== 'senior') return NextResponse.json({ error: '어르신 계정만 AI 요청을 만들 수 있어요.' }, { status: 403 });
   const parsed = bodySchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '짧은 요청 내용을 입력해 주세요.' }, { status: 400 });
   const { port: ai, provider } = selectAiPort();
   try {
-    const turn = await respondToUtterance(parsed.data, ai);
+    const input = {
+      ...parsed.data,
+      seniorId: actor.id,
+      priorDraft: parsed.data.priorDraft ? { ...parsed.data.priorDraft, seniorId: actor.id } : undefined,
+    };
+    const turn = await respondToUtterance(input, ai);
     const speech_token = createAssistantTurnToken({ id: turn.id, seniorId: turn.seniorId, text: turn.assistant_text });
     return NextResponse.json({ ...turn, speech_token, is_demo: provider === 'fixture' });
   } catch {

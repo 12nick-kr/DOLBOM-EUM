@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { selectAiPort } from '@/lib/server/aiFactory';
-import { demoSeniorId, state } from '@/lib/server/store';
+import { state } from '@/lib/server/store';
 import { verifyAssistantTurnToken } from '@/lib/server/assistantTurnToken';
+import { authenticatedActor } from '@/lib/server/auth';
 
 /** PRD FR-07: 서버 TTS가 5초 안에 시작하지 못하면 브라우저 TTS로 폴백한다. */
 const TTS_TIMEOUT_MS = 5000;
@@ -20,12 +21,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * `AiPort`에 위임한다.
  */
 export async function POST(request: NextRequest) {
-  const data = z.object({ assistant_turn_id: z.string(), senior_id: z.string().default(demoSeniorId), speech_token: z.string().optional() }).safeParse(await request.json());
+  const actor = await authenticatedActor(request);
+  if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
+  if (actor.role !== 'senior') return NextResponse.json({ error: '어르신 계정만 음성 답변을 들을 수 있어요.' }, { status: 403 });
+  const data = z.object({ assistant_turn_id: z.string(), senior_id: z.string().optional(), speech_token: z.string().optional() }).safeParse(await request.json());
   if (!data.success) return NextResponse.json({ error: 'assistant_turn_id가 필요해요.' }, { status: 400 });
   const verified = data.data.speech_token
-    ? verifyAssistantTurnToken(data.data.speech_token, { id: data.data.assistant_turn_id, seniorId: data.data.senior_id })
+    ? verifyAssistantTurnToken(data.data.speech_token, { id: data.data.assistant_turn_id, seniorId: actor.id })
     : null;
-  const storedTurn = state.turns.find((item) => item.id === data.data.assistant_turn_id && item.seniorId === data.data.senior_id);
+  const storedTurn = state.turns.find((item) => item.id === data.data.assistant_turn_id && item.seniorId === actor.id);
   const turnText = verified?.text ?? storedTurn?.assistant_text;
   if (!turnText) return NextResponse.json({ error: '권한이 없거나 답변을 찾을 수 없어요.' }, { status: 403 });
 

@@ -9,6 +9,7 @@ import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 import { useEmergencyList } from '@/lib/client/useEmergencyList';
 import { emergencyStatusLabel } from '@/lib/domain/policies';
+import { LogoutButton } from './LogoutButton';
 
 async function fetchFamilyRequests(): Promise<ServiceRequest[]> {
   const response = await fetch('/api/care-cards');
@@ -39,7 +40,7 @@ export function FamilyDashboard() {
   const latestEmergency = emergencies[0];
 
   return <main className="family-shell"><DemoBadge />
-    <header className="app-header"><div><p className="eyebrow">돌봄이음 AI</p><h1>아버지의 오늘</h1></div><span className="avatar">이</span></header>
+    <header className="app-header"><div><p className="eyebrow">돌봄이음 AI</p><h1>아버지의 오늘</h1></div><div className="session-actions"><span className="avatar">이</span><LogoutButton className="header-logout" /></div></header>
     {view === 'home' && <>
       {latestEmergency && <button className={`alert-card ${latestEmergency.status === 'closed' ? 'resolved-alert-card' : ''}`} onClick={() => setView('emergency')}><StatusPill status={emergencyStatusLabel(latestEmergency.status)} /><strong>{latestEmergency.status === 'closed' ? '어르신이 긴급 상황을 종료했어요.' : latestEmergency.utterance}</strong><span>{new Date(latestEmergency.createdAt).toLocaleString('ko-KR')} · {latestEmergency.location} ›</span></button>}
       <section className="family-grid"><article><small>마지막 확인</small><strong>{latestRequest ? new Date(latestRequest.updatedAt).toLocaleString('ko-KR') : '기록 없음'}</strong><span>요청 카드 기준</span></article><article><small>오늘 상태</small><strong>{weekly.unresolved > 0 ? '도움 요청 확인 중' : '새 요청 없음'}</strong><span>요청 카드 기준</span></article></section>
