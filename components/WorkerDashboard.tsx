@@ -27,7 +27,7 @@ export function WorkerDashboard() {
 
   const filtered = useMemo(() => requests.filter((item) => filter === '전체' || (filter === '신규' && item.status === 'new') || (filter === '진행중' && item.status === 'in_progress') || (filter === '완료' && item.status === 'done')), [requests, filter]);
   const selected = requests.find((request) => request.id === selectedId) ?? null;
-  const latestEmergency = emergencies[0];
+  const latestEmergency = emergencies.find((event) => event.status !== 'closed') ?? null;
   const openRequest = (id: string) => { setSelectedId(id); acknowledge(id); setPage('request'); };
   const takeCharge = async (id: string) => {
     const response = await fetch(`/api/service-requests/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_progress' }) });

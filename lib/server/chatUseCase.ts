@@ -46,7 +46,9 @@ export async function respondToUtterance(input: ChatUseCaseInput, ai: AiPort = f
   const assistant_text = result.urgency === 'emergency'
     ? '지금 바로 긴급 도움 화면을 열었어요. 119에 전화할지 함께 확인해요.'
     : result.intent === 'service_request'
-      ? '요청 내용을 정리했어요. 맞는지 확인해 주세요.'
+      ? result.draft?.missingFields.includes('희망 날짜')
+        ? '오늘, 내일, 이번 주 중 언제가 편하세요? “내일 오전”처럼 말씀해 주세요.'
+        : '요청 내용을 카드로 정리했어요. 이 요청을 담당자에게 보내시겠습니까?'
       : '말씀해 주셔서 고마워요. 필요한 도움을 함께 찾아볼게요.';
 
   const turn: ChatUseCaseResult = {

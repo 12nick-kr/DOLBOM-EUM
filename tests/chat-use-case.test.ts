@@ -37,6 +37,14 @@ describe('chat use case — text and voice share one structure (PRD FR-04, FR-07
     expect(second.draft?.missingFields).not.toContain('희망 날짜');
   });
 
+  it('does not trap the senior in repeated date questions when the single follow-up is still unclear', async () => {
+    const first = await respondToUtterance({ text: '병원 갈 때 같이 갈 사람이 필요해요.', seniorId: 'senior-1', inputType: 'voice' });
+    const second = await respondToUtterance({ text: '잘 모르겠어요.', seniorId: 'senior-1', inputType: 'voice', priorDraft: first.draft! });
+    expect(second.draft?.missingFields).not.toContain('희망 날짜');
+    expect(second.draft?.details.dateResolution).toBe('needs_coordination');
+    expect(second.assistant_text).toContain('보내시겠습니까');
+  });
+
   it('does not persist anything server-side merely by producing a draft', async () => {
     const turn = await respondToUtterance({ text: '병원 갈 때 같이 갈 사람이 필요해요.', seniorId: 'senior-1', inputType: 'text' });
     expect(turn.draft).toBeDefined();

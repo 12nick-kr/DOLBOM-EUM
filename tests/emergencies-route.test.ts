@@ -24,6 +24,16 @@ describe('POST /api/emergencies requires explicit confirmation (PRD §10.3 고�
 });
 
 describe('PATCH /api/emergencies/:id appends an audited action for every status change (FR-03)', () => {
+  it('allows the owning senior to close an active emergency without deleting its audit history', async () => {
+    const { PATCH } = await import('@/app/api/emergencies/[id]/route');
+    const req = new NextRequest('http://localhost:3000/api/emergencies/emergency-demo-001', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-demo-role': 'senior' }, body: JSON.stringify({ status: 'closed', action: '어르신이 긴급 상황을 종료했어요.', closeReason: 'senior_cancelled' }) });
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'emergency-demo-001' }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('closed');
+    expect(body.actions.at(-1)).toMatchObject({ actor: 'senior', action: '어르신이 긴급 상황을 종료했어요.' });
+  });
+
   it('records actor, action, and timestamp for a family acknowledgement', async () => {
     const { PATCH } = await import('@/app/api/emergencies/[id]/route');
     const req = new NextRequest('http://localhost:3000/api/emergencies/emergency-demo-001', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-demo-role': 'family' }, body: JSON.stringify({ actor: 'family', status: 'family_acknowledged', action: '가족이 확인했어요.' }) });

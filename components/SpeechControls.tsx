@@ -1,15 +1,30 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { SpeechStatus } from '@/lib/domain/types';
+import { getAssistantSpeechToken } from '@/lib/client/speechTokenStore';
 
 /** 서버 TTS가 5초 안에 응답하지 못하면 브라우저 speechSynthesis로 폴백한다 (PRD FR-07). */
 const SERVER_TTS_TIMEOUT_MS = 5000;
 
-export function SpeechControls({ text, assistantTurnId, compact = false }: { text: string; assistantTurnId?: string; compact?: boolean }) {
+type SpeechControlsProps = {
+  text: string;
+  assistantTurnId?: string;
+  speechToken?: string;
+  compact?: boolean;
+  autoPlay?: boolean;
+  onCompleted?: () => void;
+};
+
+export function SpeechControls({ text, assistantTurnId, speechToken, compact = false, autoPlay = false, onCompleted }: SpeechControlsProps) {
+  const resolvedSpeechToken = speechToken ?? getAssistantSpeechToken(assistantTurnId);
   const [status, setStatus] = useState<SpeechStatus>('idle');
   const [enabled, setEnabled] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const onCompletedRef = useRef(onCompleted);
+  const playRef = useRef<() => Promise<void>>(async () => undefined);
+  const autoPlayedKeyRef = useRef('');
+  onCompletedRef.current = onCompleted;
 
   const releaseAudioUrl = () => {
     if (objectUrlRef.current) { URL.revokeObjectURL(objectUrlRef.current); objectUrlRef.current = null; }
@@ -21,7 +36,7 @@ export function SpeechControls({ text, assistantTurnId, compact = false }: { tex
     utterance.lang = 'ko-KR';
     utterance.rate = 0.85;
     utterance.onstart = () => setStatus('playing');
-    utterance.onend = () => setStatus('completed');
+    utterance.onend = () => { setStatus('completed'); onCompletedRef.current?.(); };
     utterance.onerror = () => setStatus('error');
     window.speechSynthesis.speak(utterance);
   };
@@ -56,7 +71,7 @@ export function SpeechControls({ text, assistantTurnId, compact = false }: { tex
       const res = await fetch('/api/ai/speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assistant_turn_id: assistantTurnId }),
+        body: JSON.stringify({ assistant_turn_id: assistantTurnId, speech_token: resolvedSpeechToken }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -69,7 +84,7 @@ export function SpeechControls({ text, assistantTurnId, compact = false }: { tex
         const audio = new Audio(url);
         audioRef.current = audio;
         audio.onplay = () => setStatus('playing');
-        audio.onended = () => setStatus('completed');
+        audio.onended = () => { setStatus('completed'); onCompletedRef.current?.(); };
         audio.onerror = () => { setStatus('error'); speakWithBrowser(); };
         await audio.play();
         return;
@@ -81,6 +96,7 @@ export function SpeechControls({ text, assistantTurnId, compact = false }: { tex
       speakWithBrowser();
     }
   };
+  playRef.current = play;
 
   const pause = () => {
     if (status === 'paused') {
@@ -93,6 +109,13 @@ export function SpeechControls({ text, assistantTurnId, compact = false }: { tex
       setStatus('paused');
     }
   };
+
+  useEffect(() => {
+    const key = `${assistantTurnId ?? 'local'}:${resolvedSpeechToken ?? ''}:${text}`;
+    if (!autoPlay || autoPlayedKeyRef.current === key) return;
+    autoPlayedKeyRef.current = key;
+    void playRef.current();
+  }, [assistantTurnId, autoPlay, resolvedSpeechToken, text]);
 
   useEffect(() => () => { window.speechSynthesis?.cancel(); audioRef.current?.pause(); releaseAudioUrl(); }, []);
 
