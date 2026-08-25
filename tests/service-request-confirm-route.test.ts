@@ -41,14 +41,16 @@ describe('POST /api/ai/speech requires ownership of the assistant turn', () => {
     expect(speechRes.status).toBe(403);
   });
 
-  it('allows the owning senior to fetch speech for their own turn', async () => {
+  it('allows the owning senior to fetch speech with a signed token even when route memory is not shared', async () => {
     const { POST: respond } = await import('@/app/api/ai/respond/route');
     const respondReq = new NextRequest('http://localhost:3000/api/ai/respond', { method: 'POST', body: JSON.stringify({ text: '안녕하세요', seniorId: 'senior-owner-2' }), headers: { 'Content-Type': 'application/json' } });
     const respondRes = await respond(respondReq);
     const turn = await respondRes.json();
+    const { state } = await import('@/lib/server/store');
+    state.turns.splice(0, state.turns.length);
 
     const { POST: speech } = await import('@/app/api/ai/speech/route');
-    const speechReq = new NextRequest('http://localhost:3000/api/ai/speech', { method: 'POST', body: JSON.stringify({ assistant_turn_id: turn.id, senior_id: 'senior-owner-2' }), headers: { 'Content-Type': 'application/json' } });
+    const speechReq = new NextRequest('http://localhost:3000/api/ai/speech', { method: 'POST', body: JSON.stringify({ assistant_turn_id: turn.id, senior_id: 'senior-owner-2', speech_token: turn.speech_token }), headers: { 'Content-Type': 'application/json' } });
     const speechRes = await speech(speechReq);
     expect(speechRes.status).toBe(200);
     expect(speechRes.headers.get('Cache-Control')).toContain('no-store');

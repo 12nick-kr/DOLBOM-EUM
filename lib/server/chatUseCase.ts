@@ -1,4 +1,5 @@
 import type { AssistantTurn, RequestInputType, ServiceRequestDraft } from '@/lib/domain/types';
+import { draftServiceRequest } from '@/lib/domain/requestDraft';
 import type { AiPort } from './ai';
 import { fixtureAi } from './ai';
 import { id, state } from './store';
@@ -7,6 +8,7 @@ export type ChatUseCaseInput = {
   text: string;
   seniorId: string;
   inputType: RequestInputType;
+  purpose?: 'conversation' | 'service_request';
   priorDraft?: ServiceRequestDraft;
 };
 
@@ -23,12 +25,30 @@ export type ChatUseCaseResult = AssistantTurn & { draft?: ServiceRequestDraft };
  * 키워드 규칙은 두 어댑터 모두 모델 호출보다 먼저 평가한다(TDD §3.6).
  */
 export async function respondToUtterance(input: ChatUseCaseInput, ai: AiPort = fixtureAi): Promise<ChatUseCaseResult> {
-  const result = await ai.classifyAndDraft({ text: input.text, priorDraft: input.priorDraft, inputType: input.inputType, seniorId: input.seniorId });
+  const classified = await ai.classifyAndDraft({ text: input.text, priorDraft: input.priorDraft, inputType: input.inputType, seniorId: input.seniorId });
+  const forceRequestDraft = input.purpose === 'service_request' && classified.urgency !== 'emergency';
+  const result = forceRequestDraft && (classified.intent !== 'service_request' || !classified.draft)
+    ? {
+        ...classified,
+        intent: 'service_request' as const,
+        urgency: classified.urgency === 'normal' ? 'welfare' as const : classified.urgency,
+        proposed_tool: 'draft_service_request',
+        requires_confirmation: true,
+        draft: draftServiceRequest({
+          text: input.text,
+          seniorId: input.seniorId,
+          inputType: input.inputType,
+          priorDraft: input.priorDraft,
+        }),
+      }
+    : classified;
 
   const assistant_text = result.urgency === 'emergency'
     ? '지금 바로 긴급 도움 화면을 열었어요. 119에 전화할지 함께 확인해요.'
     : result.intent === 'service_request'
-      ? '요청 내용을 정리했어요. 맞는지 확인해 주세요.'
+      ? result.draft?.missingFields.includes('희망 날짜')
+        ? '오늘, 내일, 이번 주 중 언제가 편하세요? “내일 오전”처럼 말씀해 주세요.'
+        : '요청 내용을 카드로 정리했어요. 이 요청을 담당자에게 보내시겠습니까?'
       : '말씀해 주셔서 고마워요. 필요한 도움을 함께 찾아볼게요.';
 
   const turn: ChatUseCaseResult = {

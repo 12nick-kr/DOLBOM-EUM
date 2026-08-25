@@ -30,7 +30,8 @@ export class SupabaseEmergencyRepository implements EmergencyRepository {
     const { data, error } = await this.client.from('emergency_events').update({ status: input.status }).eq('id', id).select().single();
     if (error) throw new Error(`emergency_events 상태 변경 실패: ${error.message}`);
     const event = mapRow(data as EmergencyRow);
-    const { error: auditError } = await this.client.from('audit_logs').insert({ actor_id: input.actorId, action: input.action, resource_type: 'emergency_event', resource_id: id, reason: '앱 내 처리 상태 반영' });
+    const reason = input.closeReason ? `긴급 종료: ${input.closeReason}` : '앱 내 처리 상태 반영';
+    const { error: auditError } = await this.client.from('audit_logs').insert({ actor_id: input.actorId, action: input.action, resource_type: 'emergency_event', resource_id: id, reason });
     if (auditError) throw new Error(`emergency_events 감사 기록 실패: ${auditError.message}`);
     event.actions.push({ actor: input.actor, action: input.action, result: '앱 내 처리 상태 반영', at: new Date().toISOString() });
     return event;

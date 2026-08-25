@@ -1,7 +1,8 @@
 import type { EmergencyEvent, Role } from '@/lib/domain/types';
 
 export type CreateEmergencyInput = { seniorId: string; utterance: string; location: string };
-export type UpdateEmergencyInput = { status: EmergencyEvent['status']; actor: Exclude<Role, 'senior'>; actorId: string; action: string };
+export type EmergencyCloseReason = 'senior_cancelled' | 'resolved' | 'false_alarm';
+export type UpdateEmergencyInput = { status: EmergencyEvent['status']; actor: Role; actorId: string; action: string; closeReason?: EmergencyCloseReason };
 
 export interface EmergencyRepository {
   list(): Promise<EmergencyEvent[]>;

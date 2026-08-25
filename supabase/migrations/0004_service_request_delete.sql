@@ -14,6 +14,9 @@ alter table public.service_requests
   add constraint service_requests_source_event_id_fkey
   foreign key (source_event_id) references public.senior_input_events(id) on delete set null;
 
+-- SQL Editor에서 일부만 먼저 적용됐거나 마이그레이션을 재실행해도 같은 이름 충돌이 나지 않게 한다.
+drop policy if exists service_requests_delete_assigned_worker on public.service_requests;
+
 create policy service_requests_delete_assigned_worker on public.service_requests
   for delete using (
     exists (

@@ -69,6 +69,13 @@ export type SeniorInputEvent = z.infer<typeof seniorInputEventSchema>;
 export const requestDetailsSchema = z.object({
   destination: z.string().optional(),
   desiredAt: z.string().optional(),
+  desiredDateStart: z.string().optional(),
+  desiredDateEnd: z.string().optional(),
+  timeWindow: z.enum(['dawn', 'morning', 'midday', 'afternoon', 'evening', 'flexible']).optional(),
+  originalDateExpression: z.string().optional(),
+  timezone: z.literal('Asia/Seoul').optional(),
+  dateResolution: z.enum(['resolved', 'range', 'needs_coordination']).optional(),
+  dateConfidence: z.number().min(0).max(1).optional(),
   needsTransportHelp: z.boolean().optional(),
 }).catchall(z.unknown());
 export type RequestDetails = z.infer<typeof requestDetailsSchema>;

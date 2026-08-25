@@ -81,4 +81,15 @@ describe('FamilyDashboard — emergency acknowledgement leaves an audit trail (P
     window.dispatchEvent(new CustomEvent('dolbom:emergency-change'));
     expect(await screen.findByText(emergency.utterance)).toBeVisible();
   });
+
+  it('shows a senior-closed emergency as ended instead of an active unconfirmed alert', async () => {
+    const closedEmergency = { ...emergency, status: 'closed' };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [] }) };
+      return { ok: true, json: async () => ({ data: [closedEmergency] }) };
+    }));
+    render(<FamilyDashboard />);
+    expect(await screen.findByText('긴급 종료됨')).toBeVisible();
+    expect(screen.getByText('어르신이 긴급 상황을 종료했어요.')).toBeVisible();
+  });
 });

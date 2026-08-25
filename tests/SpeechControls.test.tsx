@@ -32,6 +32,7 @@ describe('SpeechControls — real server TTS with browser fallback', () => {
       expect(url).toBe('/api/ai/speech');
       const body = JSON.parse(String(init?.body));
       expect(body.assistant_turn_id).toBe('turn-123');
+      expect(body.speech_token).toBe('signed-token');
       return {
         ok: true,
         headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'audio/mpeg' : null) },
@@ -40,7 +41,7 @@ describe('SpeechControls — real server TTS with browser fallback', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<SpeechControls text="도움을 준비했어요." assistantTurnId="turn-123" />);
+    render(<SpeechControls text="도움을 준비했어요." assistantTurnId="turn-123" speechToken="signed-token" />);
     fireEvent.click(screen.getByRole('button', { name: '다시 듣기' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/ai/speech', expect.anything()));
@@ -89,5 +90,20 @@ describe('SpeechControls — real server TTS with browser fallback', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(speakSpy).toHaveBeenCalled();
+  });
+
+  it('automatically speaks a new prompt and reports completion to the conversation flow', async () => {
+    const onCompleted = vi.fn();
+    const speakSpy = vi.fn((utterance: { onstart?: () => void; onend?: () => void }) => {
+      utterance.onstart?.();
+      utterance.onend?.();
+    });
+    vi.stubGlobal('speechSynthesis', { speak: speakSpy, cancel: vi.fn(), pause: vi.fn(), resume: vi.fn() });
+    vi.stubGlobal('SpeechSynthesisUtterance', vi.fn().mockImplementation(function (this: Record<string, unknown>, text: string) { this.text = text; }));
+
+    render(<SpeechControls text="이 요청을 보내시겠습니까?" autoPlay onCompleted={onCompleted} />);
+
+    await waitFor(() => expect(speakSpy).toHaveBeenCalledTimes(1));
+    expect(onCompleted).toHaveBeenCalledTimes(1);
   });
 });

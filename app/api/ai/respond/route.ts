@@ -4,6 +4,7 @@ import { requestDetailsSchema, requestInputTypeSchema } from '@/lib/domain/types
 import { respondToUtterance } from '@/lib/server/chatUseCase';
 import { selectAiPort } from '@/lib/server/aiFactory';
 import { demoSeniorId } from '@/lib/server/store';
+import { createAssistantTurnToken } from '@/lib/server/assistantTurnToken';
 
 const priorDraftSchema = z.object({
   seniorId: z.string(),
@@ -19,6 +20,7 @@ const bodySchema = z.object({
   text: z.string().min(1).max(1000),
   seniorId: z.string().default(demoSeniorId),
   inputType: requestInputTypeSchema.default('text'),
+  purpose: z.enum(['conversation', 'service_request']).default('conversation'),
   priorDraft: priorDraftSchema.optional(),
 });
 
@@ -28,7 +30,8 @@ export async function POST(request: NextRequest) {
   const { port: ai, provider } = selectAiPort();
   try {
     const turn = await respondToUtterance(parsed.data, ai);
-    return NextResponse.json({ ...turn, is_demo: provider === 'fixture' });
+    const speech_token = createAssistantTurnToken({ id: turn.id, seniorId: turn.seniorId, text: turn.assistant_text });
+    return NextResponse.json({ ...turn, speech_token, is_demo: provider === 'fixture' });
   } catch {
     // PRD §11.5: 자격증명이 있는데 실제 호출이 실패하면 조용히 mock으로 대체하지 않고
     // 명확한 오류 상태를 반환한다. 긴급 버튼/화면 자체는 이 응답과 무관하게 계속 동작한다.

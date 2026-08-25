@@ -390,3 +390,53 @@
 - 디자인: 카드 헤더 flex의 `margin-left:auto`로 삭제 버튼을 우상단에 배치해 `DESIGN.md`의 카드 내부 absolute 금지 규칙을 지켰다. 위험 색·간격·터치 크기는 기존 토큰만 사용했다.
 - 검증: `npm test -- --run` 29개 파일/183개 테스트, typecheck, lint, build 통과. 외부 자격증명을 비운 in-memory E2E 4개가 통과했고 마지막 시나리오는 노인 생성→가족/복지사 반영→복지사 상태 변경→노인 반영→복지사 삭제→세 화면 제거까지 검증한다. 실제 Chrome에서도 카드 우상단 삭제 버튼과 서버 JSON 삭제 경고 모달, 취소 후 원상 유지, 콘솔 오류 없음을 확인했다.
 - 외부 변경: 실제 Supabase에는 `0004_service_request_delete.sql`을 적용하지 않았다. 적용 전 운영 DB 삭제 RPC와 긴급 Realtime publication은 사용할 수 없고 1초 폴링이 계속 폴백한다.
+
+## 2026-08-25 — 노인 요청 입력 3단계 통합과 하단 긴급 동작 영역 개선
+
+- 목표: 음성·텍스트 요청이 서로 다른 화면으로 빠지던 흐름을 하나로 합치고, 원문 확인 → AI 분석 → 원문/AI 요약 카드 확인의 3단계를 보장한다. 말동무 프론트엔드를 제거하고 긴급 도움 버튼이 주요 동작을 가리지 않게 한다.
+- Red:
+  - 텍스트가 AI 호출 전에 원문 확인 화면을 통과하는지, 음성 전사도 같은 확인/카드 화면을 쓰는지, 최종 확인 전 서버 저장이 없는지 테스트를 추가했다.
+  - AI 응답 대기 중 중복 분석 요청이 차단되는지, 요청 전용 처리에서도 `conversation`으로 분류된 입력이 요청 초안을 받는지, 말동무 메뉴가 제거됐는지 검증하는 실패 테스트를 추가했다.
+  - Playwright에 375×667 화면에서 `보내주세요`와 하단 긴급 영역의 실제 좌표가 겹치지 않는 검증을 추가했다.
+- Green:
+  - `SeniorExperience`를 `useReducer` 기반의 단일 화면 상태로 정리했다. 텍스트와 음성은 모두 `입력 → 원문 확인 → AI 분석/신청 확인`을 공유하며 요청 입력 경로는 더 이상 일반 `알겠어요` 화면으로 이동하지 않는다.
+  - `/api/ai/respond`에 `purpose: service_request` 계약을 추가하고, 서버 use case가 비긴급 입력에 항상 `ServiceRequestDraft`를 보장하도록 했다. 저장은 기존과 동일하게 `보내주세요` 이후 한 번만 수행한다.
+  - 음성 녹음의 고정 4초 대기를 제거했다. 사용자가 `녹음 마치기`를 누르면 즉시 전사를 시작하고, 60초는 안전한 최대 자동 종료 시간으로만 사용한다.
+  - 신청 확인 화면에 `텍스트 입력 원문` 또는 `음성 인식 원문` 카드와 `AI 요약` 카드를 동시에 렌더링한다. 부족한 정보는 같은 화면에서 한 항목만 추가한다.
+  - 말동무 상태·화면·하단 메뉴와 가족 화면의 대화 안부 동의 UI를 제거했다. 복지 정보 음성 안내와 공통 TTS는 유지했다.
+  - 긴급 도움과 `홈 / 내 요청`을 전용 고정 footer에 넣고 본문에 토큰 기반 안전 여백을 확보했다. 긴급 화면에서는 footer를 숨긴다.
+- 검증:
+  - `npm test -- --run`: 29개 파일, 188개 테스트 통과. 긴급 화면을 연 뒤 늦은 AI 응답이 화면을 되돌리지 않는 경합 회귀도 포함한다.
+  - `npm run typecheck`, `npm run lint`, `npm run build`: 통과. `/senior` First Load JS 112 kB.
+  - 외부 자격증명을 비운 인메모리 `npm run test:e2e`: 5개 통과. 텍스트 3단계, 긴급 전화 확인, compact viewport 비겹침, 역할 간 요청 전달·상태 변경·삭제를 검증했다.
+  - 실제 자격증명 환경 E2E에서는 이번 변경의 노인 3단계/compact layout 3개가 통과했다. 기존 운영 DB에 긴급 데모 시드가 없고 `0004_service_request_delete.sql`이 아직 적용되지 않아 나머지 2개는 실패했으며, 이번 작업에서 원격 DB는 변경하지 않았다.
+- 외부 변경: 없음. 실제 Supabase 마이그레이션·데이터 쓰기는 수행하지 않았다.
+
+## 2026-08-25 — `0004` 삭제 정책 재실행 충돌 수정
+
+- 실제 Supabase SQL Editor에서 `0004_service_request_delete.sql`을 다시 실행할 때 이미 존재하는 `service_requests_delete_assigned_worker` 정책 때문에 PostgreSQL `42710 duplicate_object`가 발생했다.
+- Red: 마이그레이션이 정책 생성 전에 `drop policy if exists`를 포함하는지 검사하는 테스트를 추가했고 기존 SQL에서 실패를 확인했다.
+- Green: 동일 이름 정책을 먼저 제거한 뒤 현재 정의로 다시 생성하도록 수정했다. 제약조건은 기존 `drop constraint if exists`, 함수는 `create or replace`, publication 등록은 `duplicate_object` 예외 처리로 이미 재실행 가능하다.
+- 검증: `npm test -- --run` 30개 파일/189개 테스트, typecheck, lint, build 통과. 원격 Supabase에는 이 작업에서 직접 SQL을 실행하지 않았다.
+
+## 2026-08-25 — Vercel 첫 Production 배포
+
+- 배포 전 기준선: `codex/core-care-flow` 작업 트리에서 30개 테스트 파일/189개 테스트, typecheck, lint, Next production build를 모두 통과했다.
+- Vercel 구성:
+  - `12nick/dolbom-eum` 프로젝트를 만들고 GitHub `12nick-kr/DOLBOM-EUM` 저장소를 연결했다.
+  - OpenAI 2개, Supabase 3개 필수 환경변수를 Production/Preview에 민감 변수로 등록했다. 실제 값은 로그와 저장소에 남기지 않았다.
+  - CLI가 만든 `.vercel` 로컬 링크 디렉터리를 `.gitignore`에 추가했다.
+- 첫 배포는 Vercel 프로젝트가 Framework Preset을 `Other`, Output Directory를 `public`으로 잘못 잡아 원격 Next 빌드 완료 후 실패했다. 프로젝트 설정을 `Next.js`, Build/Output 자동 감지로 교정한 뒤 재배포했다.
+- Production:
+  - 고정 주소: `https://dolbom-eum.vercel.app`
+  - 배포 ID: `dpl_Bn66B3bpomY9aCWSdfT7AnBPixNv`
+  - 상태: READY
+- 배포 후 스모크 테스트:
+  - 랜딩, senior/family/worker 세 역할 세션과 페이지 모두 HTTP 200.
+  - Production Supabase 기반 `/api/care-cards` 조회 200 및 JSON 배열 계약 확인.
+  - 합성 요청을 사용한 Production OpenAI `/api/ai/respond` 200 및 `service_request` 초안 확인. 저장 요청은 실행하지 않았다.
+  - 375×667 Chromium에서 React hydration, 원문 확인 → AI 분석 → 신청 카드, 원문/AI 요약 동시 표시, 말동무 제거, 긴급 footer 비겹침, 콘솔 오류 0건 확인. `보내주세요`는 누르지 않아 운영 데이터를 만들지 않았다.
+- 알려진 운영 제약:
+  - 실제 Supabase에서 요청 hard delete를 쓰려면 소유자가 수정된 `0004_service_request_delete.sql`을 다시 적용해야 한다.
+  - 현재 인증은 합성 데모 역할 쿠키이므로 공개 실서비스 인증이 아니다. 데모 배지는 유지하며 실제 개인정보를 입력하면 안 된다.
+  - SSE 연결이 Vercel 함수 제한으로 종료돼도 1초 서버 재조회 폴백이 카드 정본을 복구한다.

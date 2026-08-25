@@ -6,12 +6,16 @@ async function openRole(page: Page, role: 'senior' | 'family' | 'worker') {
   await page.goto(`/${role}`);
 }
 
-test('senior can initiate a hospital companion request with accessible controls', async ({ page }) => {
+test('senior can initiate a hospital escort request with accessible controls', async ({ page }) => {
   await openRole(page, 'senior');
   await expect(page.getByText('챌린지 데모 — 실제 접수 아님')).toBeVisible();
   await expect(page.getByRole('button', { name: '말하기 시작' })).toBeVisible();
   await page.getByRole('button', { name: '보내기' }).click();
-  await expect(page.getByText('병원 동행 요청이에요')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '입력한 내용이 맞나요?' })).toBeVisible();
+  await page.getByRole('button', { name: '이 내용 분석하기' }).click();
+  await expect(page.getByText('병원 동행 요청이에요')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('텍스트 입력 원문')).toBeVisible();
+  await expect(page.getByText('AI 요약')).toBeVisible();
   await page.getByRole('button', { name: '보내주세요' }).click();
   await expect(page.getByText('내 요청 보기')).toBeVisible();
 });
@@ -23,6 +27,21 @@ test('emergency button requires one confirmation before dialing', async ({ page 
   await page.getByRole('button', { name: /119 전화하기/ }).click();
   await expect(page.getByRole('link', { name: /119/ })).toHaveAttribute('href', 'tel:119');
   await expect(page.getByText(/신고 완료/)).toHaveCount(0);
+});
+
+test('emergency dock does not cover the final request action on a compact senior screen', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await openRole(page, 'senior');
+  await page.getByRole('button', { name: '보내기' }).click();
+  await page.getByRole('button', { name: '이 내용 분석하기' }).click();
+  const sendButton = page.getByRole('button', { name: '보내주세요' });
+  await expect(sendButton).toBeVisible({ timeout: 20_000 });
+  await sendButton.scrollIntoViewIfNeeded();
+  const actionBox = await sendButton.boundingBox();
+  const footerBox = await page.locator('.senior-footer').boundingBox();
+  expect(actionBox).not.toBeNull();
+  expect(footerBox).not.toBeNull();
+  expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(footerBox!.y);
 });
 
 test('family and worker see emergency data from the server', async ({ page }) => {
@@ -47,7 +66,8 @@ test('one confirmed senior input becomes the same family and worker card, then s
   await worker.getByRole('button', { name: /요청 업무함/ }).click();
   await senior.getByLabel('도움 요청 입력').fill('내일 충남대학교병원에 같이 가 주세요.');
   await senior.getByRole('button', { name: '보내기' }).click();
-  await expect(senior.getByText('병원 동행 요청이에요')).toBeVisible();
+  await senior.getByRole('button', { name: '이 내용 분석하기' }).click();
+  await expect(senior.getByText('병원 동행 요청이에요')).toBeVisible({ timeout: 20_000 });
   await senior.getByRole('button', { name: '보내주세요' }).click();
 
   await expect(worker.getByText(summary)).toBeVisible({ timeout: 7000 });

@@ -1,4 +1,4 @@
-import type { PersistedRequestStatus, RequestStatus, Role, ServiceRequest } from './types';
+import type { EmergencyEvent, PersistedRequestStatus, RequestStatus, Role, ServiceRequest } from './types';
 
 /**
  * PRD §7.4 상태 전이표:
@@ -44,6 +44,13 @@ const statusLabels: Record<Role, Record<PersistedRequestStatus, string>> = {
 
 export function statusLabelFor(role: Role, status: PersistedRequestStatus): string {
   return statusLabels[role][status];
+}
+
+export function emergencyStatusLabel(status: EmergencyEvent['status']): string {
+  if (status === 'closed') return '긴급 종료됨';
+  if (status === 'worker_followup') return '사회복지사 대응 중';
+  if (status === 'family_acknowledged') return '가족 확인 완료';
+  return '긴급 · 미확인';
 }
 
 /**
