@@ -13,13 +13,13 @@ function card(overrides: Partial<ServiceRequest> = {}): ServiceRequest {
 describe('client-side request list store (id-keyed upsert, PRD §11.4/TDD §3.9)', () => {
   it('initializes from a server fetch and lists cards newest-first', () => {
     const store = new RequestListStore();
-    store.hydrate([card({ id: 'r1', createdAt: '2026-08-25T00:00:00Z' }), card({ id: 'r2', createdAt: '2026-08-25T01:00:00Z' })]);
+    store.replaceSnapshot([card({ id: 'r1', createdAt: '2026-08-25T00:00:00Z' }), card({ id: 'r2', createdAt: '2026-08-25T01:00:00Z' })]);
     expect(store.list().map((c) => c.id)).toEqual(['r2', 'r1']);
   });
 
   it('adds a new card to the top of the list on insert, marking it unread', () => {
     const store = new RequestListStore();
-    store.hydrate([card({ id: 'r1' })]);
+    store.replaceSnapshot([card({ id: 'r1' })]);
     store.upsert(card({ id: 'r2', updatedAt: '2026-08-25T01:00:00Z' }));
     expect(store.list()[0].id).toBe('r2');
     expect(store.isUnread('r2')).toBe(true);
@@ -49,7 +49,7 @@ describe('client-side request list store (id-keyed upsert, PRD §11.4/TDD §3.9)
 
   it('does not clear the list on disconnect and keeps the last known cards', () => {
     const store = new RequestListStore();
-    store.hydrate([card({ id: 'r1' })]);
+    store.replaceSnapshot([card({ id: 'r1' })]);
     store.setConnectionState('disconnected');
     expect(store.list()).toHaveLength(1);
     expect(store.connectionState()).toBe('disconnected');
@@ -67,16 +67,16 @@ describe('client-side request list store (id-keyed upsert, PRD §11.4/TDD §3.9)
 
   it('reconciles missed events by replacing entries from a full re-fetch without dropping newer local state incorrectly', () => {
     const store = new RequestListStore();
-    store.hydrate([card({ id: 'r1', status: 'new', updatedAt: '2026-08-25T01:00:00Z' })]);
+    store.replaceSnapshot([card({ id: 'r1', status: 'new', updatedAt: '2026-08-25T01:00:00Z' })]);
     // Reconnect re-fetch brings a card updated while disconnected.
-    store.hydrate([card({ id: 'r1', status: 'in_progress', updatedAt: '2026-08-25T03:00:00Z' }), card({ id: 'r2', status: 'new', updatedAt: '2026-08-25T03:00:00Z' })]);
+    store.replaceSnapshot([card({ id: 'r1', status: 'in_progress', updatedAt: '2026-08-25T03:00:00Z' }), card({ id: 'r2', status: 'new', updatedAt: '2026-08-25T03:00:00Z' })]);
     expect(store.list().find((c) => c.id === 'r1')?.status).toBe('in_progress');
     expect(store.list().map((c) => c.id).sort()).toEqual(['r1', 'r2']);
   });
 
   it('removes rows missing from an authoritative server snapshot', () => {
     const store = new RequestListStore();
-    store.hydrate([card({ id: 'r1' }), card({ id: 'r2' })]);
+    store.replaceSnapshot([card({ id: 'r1' }), card({ id: 'r2' })]);
     store.replaceSnapshot([card({ id: 'r2' })]);
     expect(store.list().map((c) => c.id)).toEqual(['r2']);
   });
@@ -87,5 +87,27 @@ describe('client-side request list store (id-keyed upsert, PRD §11.4/TDD §3.9)
     store.remove('r1', '2026-08-25T03:00:00Z');
     store.upsert(card({ id: 'r1', updatedAt: '2026-08-25T04:00:00Z' }));
     expect(store.list()).toEqual([]);
+  });
+});
+
+describe('tombstone lifecycle (메모리 누수 방지)', () => {
+  it('영구 삭제된 카드의 tombstone을 TTL 경과 후 정리한다', () => {
+    const store = new RequestListStore();
+    store.replaceSnapshot([card({ id: 'r1' })]);
+    store.remove('r1', '2026-08-25T00:00:00Z');
+    expect(store.tombstoneCount()).toBe(1);
+    // 서버 정본에서 계속 사라진 채로 TTL(기본 60초)이 지나면 tombstone은 더 이상 보관하지 않는다.
+    store.replaceSnapshot([], '2026-08-25T00:05:00Z');
+    expect(store.tombstoneCount()).toBe(0);
+  });
+
+  it('TTL 이내에는 tombstone을 유지해 늦게 도착한 스냅샷의 부활을 막는다', () => {
+    const store = new RequestListStore();
+    store.replaceSnapshot([card({ id: 'r1' })]);
+    store.remove('r1', '2026-08-25T00:00:30Z');
+    // 삭제보다 먼저 출발한 조회 결과가 뒤늦게 도착해도 카드가 되살아나지 않는다.
+    store.replaceSnapshot([card({ id: 'r1' })], '2026-08-25T00:00:10Z');
+    expect(store.list()).toHaveLength(0);
+    expect(store.tombstoneCount()).toBe(1);
   });
 });
