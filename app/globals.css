@@ -37,8 +37,10 @@
   --radius-control: 12px;
   --radius-pill: 999px;
 
+  --shadow-card: 0 1px 2px rgba(25, 31, 40, 0.04), 0 4px 12px rgba(25, 31, 40, 0.04);
+
   --gap-card: var(--space-16);
-  --gap-stack: var(--space-16);
+  --gap-stack: var(--space-24);
   --gap-page: var(--space-16);
 
   /* §2.2 타이포 — 역할 이름으로만 부른다. default 밀도 기준값 */
@@ -96,13 +98,14 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
    공통 컴포넌트 (DESIGN.md §4)
    ========================================================================== */
 
-/* 카드: 테두리로만 구분, 그림자 없음 */
+/* 카드: 테두리 + 옅은 그림자로 구분 */
 .card, .role-card, .request-card, .summary-card, .document-card, .decision-card,
-.alert-card, .inbox-card, .stats article, .family-grid article, .list-row,
+.alert-card, .inbox-card, .stats article, .family-grid article,
 .worker-emergency, .case-header {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .demo-badge {
@@ -354,7 +357,7 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 .app-header h1 { font: var(--text-display); font-size: 24px; margin: 0; letter-spacing: -0.03em; }
 .avatar, .profile { width: 42px; height: 42px; border-radius: 50%; background: var(--blue-bg); color: var(--blue-strong); display: grid; place-content: center; font-weight: 700; }
 
-.alert-card { width: 100%; display: grid; gap: var(--space-8); text-align: left; padding: var(--gap-card); background: var(--red-bg); border-color: var(--red); }
+.alert-card { width: 100%; display: grid; gap: var(--space-8); text-align: left; padding: var(--gap-card); margin-bottom: var(--gap-stack); background: var(--red-bg); border-color: var(--red); }
 .alert-card strong { font: var(--text-title); font-size: 15px; }
 .alert-card span:last-child { font: var(--text-body); font-size: 12px; color: var(--ink-2); }
 .alert-card.resolved-alert-card, .worker-emergency.resolved-emergency { background: var(--bg-alt); border-color: var(--line); }
@@ -368,6 +371,11 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 .section-title { display: flex; align-items: center; justify-content: space-between; }
 .section-title h2, .card h2 { font: var(--text-title); }
 .section-title span { font: var(--text-label); color: var(--ink-3); }
+
+/* 페이지를 정보 묶음 단위로 분리하는 큰 섹션. 섹션 사이는 넓은 여백만으로 구분한다. */
+.section-block + .section-block { margin-top: var(--space-48); }
+.section-heading { font: var(--text-display); font-size: 20px; letter-spacing: -0.02em; margin-bottom: var(--space-16); }
+.section-block > .section-title .section-heading { margin-bottom: 0; }
 
 .week { display: flex; gap: var(--space-8); margin-top: var(--space-12); }
 .week b { flex: 1; background: var(--bg-alt); padding: var(--space-8); border-radius: var(--radius-control); font: var(--text-body); font-size: 12px; line-height: 1.5; }
@@ -458,12 +466,20 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 .care-request-card {
   background: var(--surface);
   border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-left-color: var(--line);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   padding: var(--gap-card);
   display: grid;
   gap: var(--space-12);
 }
 .care-request-card.unread { border-color: var(--blue); }
+/* 상태 tone에 따른 좌측 강조 바 — StatusPill과 동일한 색 매핑(getStatusTone)을 재사용한다. */
+.care-request-card[data-status-tone='red'] { border-left-color: var(--red); }
+.care-request-card[data-status-tone='amber'] { border-left-color: var(--amber); }
+.care-request-card[data-status-tone='mint'] { border-left-color: var(--mint); }
+.care-request-card[data-status-tone='blue'] { border-left-color: var(--blue); }
 .care-card-heading { display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
 .care-card-delete { margin-left: auto; min-height: var(--touch-min); padding: var(--space-8) var(--space-12); border: 1px solid var(--red); border-radius: var(--radius-control); color: var(--red); background: var(--surface); font: var(--text-label); }
 .care-card-delete:disabled { opacity: 0.6; }

@@ -46,6 +46,18 @@ export function statusLabelFor(role: Role, status: PersistedRequestStatus): stri
   return statusLabels[role][status];
 }
 
+/**
+ * DESIGN.md §6 상태 색 매핑을 텍스트가 아닌 `status` 값 자체에 직접 건다.
+ * 역할별 라벨 문구(예: "접수됨", "진행중")는 §6 정규식과 안정적으로 매치되지 않으므로
+ * 카드 좌측 강조 바 등 상태색이 필요한 곳은 라벨이 아니라 이 함수를 근거로 삼는다.
+ */
+export function statusToneFor(status: PersistedRequestStatus): 'red' | 'amber' | 'mint' | 'blue' | 'gray' {
+  if (status === 'new') return 'blue';
+  if (status === 'in_progress') return 'amber';
+  if (status === 'done') return 'mint';
+  return 'gray';
+}
+
 /** 요청 종류 표기는 세 역할 화면이 동일해야 하므로 여기서만 정의한다. */
 export const requestTypeLabel: Record<ServiceRequest['type'], string> = {
   hospital_escort: '병원 동행 요청',

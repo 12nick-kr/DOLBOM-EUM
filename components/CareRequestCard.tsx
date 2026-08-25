@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { requestTypeLabel, statusLabelFor } from '@/lib/domain/policies';
+import { requestTypeLabel, statusLabelFor, statusToneFor } from '@/lib/domain/policies';
 import type { Role, ServiceRequestView } from '@/lib/domain/types';
 import { StatusPill } from './StatusPill';
 import { formatDesiredDate } from '@/lib/domain/dateResolution';
@@ -23,7 +23,7 @@ export function CareRequestCard({ card, role, unread = false, onSelect, actions,
   // 이름이 아직 없으면 특정 인물을 지어내지 않고 중립 문구를 보여 준다.
   const seniorName = card.seniorName ? `${card.seniorName} 어르신` : '담당 어르신';
   return (
-    <article className={`care-request-card${unread ? ' unread' : ''}`} data-density={role === 'senior' ? 'comfort' : 'standard'}>
+    <article className={`care-request-card${unread ? ' unread' : ''}`} data-density={role === 'senior' ? 'comfort' : 'standard'} data-status-tone={statusToneFor(card.status)}>
       <div className="care-card-heading">
         <StatusPill status={statusLabelFor(role, card.status)} />
         {card.status !== 'done' && <StatusPill status={scheduleStateLabel[scheduleState]} />}
