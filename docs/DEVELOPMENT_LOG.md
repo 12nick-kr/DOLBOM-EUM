@@ -418,3 +418,25 @@
 - Red: 마이그레이션이 정책 생성 전에 `drop policy if exists`를 포함하는지 검사하는 테스트를 추가했고 기존 SQL에서 실패를 확인했다.
 - Green: 동일 이름 정책을 먼저 제거한 뒤 현재 정의로 다시 생성하도록 수정했다. 제약조건은 기존 `drop constraint if exists`, 함수는 `create or replace`, publication 등록은 `duplicate_object` 예외 처리로 이미 재실행 가능하다.
 - 검증: `npm test -- --run` 30개 파일/189개 테스트, typecheck, lint, build 통과. 원격 Supabase에는 이 작업에서 직접 SQL을 실행하지 않았다.
+
+## 2026-08-25 — Vercel 첫 Production 배포
+
+- 배포 전 기준선: `codex/core-care-flow` 작업 트리에서 30개 테스트 파일/189개 테스트, typecheck, lint, Next production build를 모두 통과했다.
+- Vercel 구성:
+  - `12nick/dolbom-eum` 프로젝트를 만들고 GitHub `12nick-kr/DOLBOM-EUM` 저장소를 연결했다.
+  - OpenAI 2개, Supabase 3개 필수 환경변수를 Production/Preview에 민감 변수로 등록했다. 실제 값은 로그와 저장소에 남기지 않았다.
+  - CLI가 만든 `.vercel` 로컬 링크 디렉터리를 `.gitignore`에 추가했다.
+- 첫 배포는 Vercel 프로젝트가 Framework Preset을 `Other`, Output Directory를 `public`으로 잘못 잡아 원격 Next 빌드 완료 후 실패했다. 프로젝트 설정을 `Next.js`, Build/Output 자동 감지로 교정한 뒤 재배포했다.
+- Production:
+  - 고정 주소: `https://dolbom-eum.vercel.app`
+  - 배포 ID: `dpl_Bn66B3bpomY9aCWSdfT7AnBPixNv`
+  - 상태: READY
+- 배포 후 스모크 테스트:
+  - 랜딩, senior/family/worker 세 역할 세션과 페이지 모두 HTTP 200.
+  - Production Supabase 기반 `/api/care-cards` 조회 200 및 JSON 배열 계약 확인.
+  - 합성 요청을 사용한 Production OpenAI `/api/ai/respond` 200 및 `service_request` 초안 확인. 저장 요청은 실행하지 않았다.
+  - 375×667 Chromium에서 React hydration, 원문 확인 → AI 분석 → 신청 카드, 원문/AI 요약 동시 표시, 말동무 제거, 긴급 footer 비겹침, 콘솔 오류 0건 확인. `보내주세요`는 누르지 않아 운영 데이터를 만들지 않았다.
+- 알려진 운영 제약:
+  - 실제 Supabase에서 요청 hard delete를 쓰려면 소유자가 수정된 `0004_service_request_delete.sql`을 다시 적용해야 한다.
+  - 현재 인증은 합성 데모 역할 쿠키이므로 공개 실서비스 인증이 아니다. 데모 배지는 유지하며 실제 개인정보를 입력하면 안 된다.
+  - SSE 연결이 Vercel 함수 제한으로 종료돼도 1초 서버 재조회 폴백이 카드 정본을 복구한다.
