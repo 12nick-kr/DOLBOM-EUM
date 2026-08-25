@@ -209,3 +209,28 @@
 - 의사결정: smoke test 실패에도 불구하고 코드는 "자격증명이 있으면 실제 어댑터를 쓴다"는 PRD §11.5 정책대로 구현을 완료했다 — 이는 결함이 아니라 정확히 의도된 동작이며, 프로젝트 소유자가 OpenAI 대시보드에서 `gpt-5.6-terra`/`gpt-transcribe`/`gpt-4o-mini-tts` 모델 접근 권한을 프로젝트에 추가(또는 `OPENAI_TEXT_MODEL`/`OPENAI_TRANSCRIBE_MODEL`/`OPENAI_TTS_MODEL`을 실제 허용된 모델로 임시 조정)하는 즉시 코드 변경 없이 정상 동작한다. 긴급 하드 게이트(`classifyWithHardEmergencyGate`)는 모델 호출 실패와 무관하게 항상 먼저 평가되므로, 이 실패가 긴급 감지 안전성에는 영향을 주지 않는다.
 - 알려진 제한/다음 단계: §14 표의 OpenAI 세 행 판정은 `조건부·미검증`에서 **`조건부·실행 확인 시도함·실패(계정 모델 권한)`**로 갱신되어야 한다(문서 갱신은 소유자가 실제 계정 설정을 바꾼 뒤 재실행하는 다음 smoke test 결과를 기다린다). `SpeechControls.tsx`는 여전히 브라우저 `speechSynthesis`만 호출하며 `/api/ai/speech`를 실제로 소비하지 않는다 — 서버 TTS 배선은 이번 단위에서 API 라우트까지만 완료했고, 클라이언트 재생 연결은 다음 단위(우선순위 3 이후) 과제로 남는다. `scripts/smoke-openai.ts`는 owner가 필요할 때 재실행할 수 있도록 저장소에 남긴다(실행 자체가 비용을 발생시키므로 CI에 자동 연결하지 않는다).
 - 예정 커밋 메시지: `feat: 실제 OpenAI 전사·의도분류·TTS 어댑터 도입`
+
+## 2026-08-25 12:39 — Phase 6b: Supabase Postgres 요청 카드 저장소 어댑터
+
+- 목표: PRD v1.4 §11.5/§12·§13에 따라 `ServiceRequestRepository` 포트의 Supabase Postgres 운영 구현을 추가하고, Supabase 세 환경변수 존재 여부로 in-memory/Supabase를 고르는 단일 결정 지점을 만든다. Supabase 프로젝트 키가 아직 없으므로(owner가 추후 추가 예정) 이번 단위는 코드 완성까지만 하고 실제 프로젝트 대상 smoke test는 하지 않는다(§14.2 "Supabase는 프로젝트 키가 설정된 뒤 실행한다").
+- PRD/TDD 근거: PRD §7.4(카드 모델)·§11.4(실시간 동기화 구조)·§11.5(신설, 실제 연동 전환 정책)·§13(데이터 모델), TDD §3.6(포트/어댑터 경계)·§3.9(실시간 계약)·§3.11.
+- Red:
+  1. `tests/supabase-service-request-repository.test.ts` 신설 — `mapRowToServiceRequest`(Postgres snake_case row → 도메인 camelCase), `mapCreateInputToRow`(역방향), `SupabaseServiceRequestRepository`(fake Supabase client 주입) 세 대상이 아직 없어 import 실패로 Red 확인.
+  2. `ServiceRequestRepository` 인터페이스를 동기(`ServiceRequest[]` 등 직접 반환)에서 `Promise<...>` 반환으로 바꾸면서 기존 `tests/consent-and-repository.test.ts`의 동기 호출 12곳이 타입 불일치로 실패하는 것을 typecheck로 먼저 확인한 뒤 `await`/`async`로 갱신했다(Supabase 어댑터는 본질적으로 비동기이므로 포트 계약 자체를 바꾸는 것이 올바른 방향이라고 판단).
+- Green:
+  - `lib/server/serviceRequestRepository.ts`: `ServiceRequestRepository`의 8개 메서드 시그니처를 모두 `Promise<T>` 반환으로 변경. `InMemoryServiceRequestRepository`는 각 메서드를 `async`로 감싸 동일 인터페이스를 만족하되 실제로는 여전히 동기적으로 즉시 resolve된다(테스트는 네트워크 없이 그대로 빠르게 통과).
+  - `lib/server/supabaseServiceRequestRepository.ts`(신규): `mapRowToServiceRequest`/`mapCreateInputToRow` 순수 매핑 함수와 `SupabaseServiceRequestRepository` 클래스. `create()`는 애플리케이션에서 먼저 idempotency를 확인하지 않고 DB의 `unique (senior_id, idempotency_key)` 제약(0001_demo_schema.sql)에 위임하며, Postgres unique_violation(`23505`)을 받으면 기존 행을 재조회해 반환한다(동시 재전송에도 안전). `transition`/`acknowledge`/`cancel`은 먼저 `get()`으로 현재 상태를 읽어 `canTransitionRequest`/`canCancelRequest`(lib/domain/policies.ts)로 서버 측 권한/전이 재검증을 한 뒤에만 UPDATE한다 — RLS는 행 접근을, 애플리케이션 정책은 상태 전이 규칙을 이중으로 강제한다(TDD §3.8 "허용되지 않은 전이는 서버가 거부").
+  - `lib/server/serviceRequestRepositoryFactory.ts`(신규): `selectServiceRequestRepository(env, seed)` — `NEXT_PUBLIC_SUPABASE_URL`과 `SUPABASE_SECRET_KEY`가 **모두** 있을 때만 `createClient` + `SupabaseServiceRequestRepository`, 하나라도 없으면 `InMemoryServiceRequestRepository`. `SUPABASE_SECRET_KEY`(RLS 우회)를 쓰는 이유와, 실제 Supabase Auth 연동 후 사용자 JWT+RLS로 전환해야 한다는 잔여 과제를 주석으로 명시했다.
+  - `lib/server/store.ts`: 하드코딩된 `new InMemoryServiceRequestRepository()`를 `selectServiceRequestRepository()` 호출로 교체하고 `serviceRequestsProvider`를 함께 export했다. 데모 시드 카드는 `provider === 'in-memory'`일 때만 생성한다 — 실제 Supabase 프로젝트에 코드가 스스로 데모 행을 INSERT하지 않는다(§11.5 "코드가 스스로 스키마를 변경하지 않는다" 원칙의 연장으로, 데이터 시딩도 동일하게 취급).
+  - `app/api/service-requests/route.ts`, `app/api/service-requests/[id]/route.ts`: 저장소 호출 4곳을 `await`로 변경.
+- Refactor: 없음(포트 계약을 async로 바꾸는 것 자체가 이번 단위의 본질적 변경이며, 이후 별도 정리 대상은 발견하지 못했다).
+- 변경 파일: `lib/server/serviceRequestRepository.ts`, `lib/server/supabaseServiceRequestRepository.ts`(신규), `lib/server/serviceRequestRepositoryFactory.ts`(신규), `lib/server/store.ts`, `app/api/service-requests/route.ts`, `app/api/service-requests/[id]/route.ts`, `tests/supabase-service-request-repository.test.ts`(신규), `tests/consent-and-repository.test.ts`.
+- 검증 명령과 결과:
+  - `npm test -- --run`: 21 test files, 155 tests 통과(기존 151 → 155, 신규 supabase-service-request-repository 4).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 18개 라우트 모두 생성 성공.
+  - Supabase 실제 프로젝트 대상 smoke test: **미실행.** `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`/`SUPABASE_SECRET_KEY`가 `.env`에 아직 없다(owner가 추후 추가 예정, 이번 세션 범위 밖). §14.2 6번 "Supabase는 프로젝트 키가 설정된 뒤 실행한다"에 따라 정상적인 보류 상태다.
+- 의사결정: 새 migration 파일(`0002_*.sql`)은 이번 단위에서 만들지 않았다 — `0001_demo_schema.sql`의 `service_requests` 테이블·RLS 정책이 이 어댑터의 컬럼명(snake_case)·상태값과 정확히 일치하는 것을 코드 작성 중 재확인했고, 어댑터 구현 과정에서 스키마 조정이 필요한 결함을 발견하지 못했기 때문이다. 실제 Supabase 프로젝트에 연결해 smoke test를 실행하면서 스키마 불일치가 발견되면 그때 `0002_*.sql`을 추가한다. Realtime(`RealtimePort`)의 Supabase `postgres_changes` 어댑터는 이번 단위에서 다루지 않았다 — 저장소가 로컬 `onChange` 리스너로 발행하는 이벤트는 여전히 프로세스 내부에서만 전파되며, 여러 서버 인스턴스/실제 브라우저 클라이언트에 걸친 전파는 클라이언트가 여전히 `PollingRealtimeClient`(3초 폴링, `GET /api/service-requests` 재조회)로 대신한다 — 이는 실제 Supabase Postgres가 정본이 된 이후에도 여전히 "복지사와 부양가족이 동시에 같은 데이터를 본다"는 요구를 충족한다(폴링 대상이 이제 실제 공유 DB이므로).
+- 알려진 제한/다음 단계: `selectServiceRequestRepository`가 매 모듈 로드마다 `createClient`를 호출하는 경량 클라이언트 생성 방식이라 서버리스/엣지 런타임에서도 안전하지만, 커넥션 풀링·재시도 정책은 Supabase 클라이언트 기본값을 그대로 따른다(별도 튜닝 없음). `FamilyDashboard.tsx`가 여전히 `/api/service-requests`를 전혀 호출하지 않고 완전히 하드코딩된 배열을 렌더링하는 문제는 이번 단위에서 다루지 않았다 — 우선순위 3(다음 단위)에서 처리한다.
+- 예정 커밋 메시지: `feat: Supabase Postgres 요청 카드 저장소 어댑터 도입`

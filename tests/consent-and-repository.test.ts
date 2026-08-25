@@ -53,9 +53,9 @@ describe('high-risk tool confirmation gate', () => {
 });
 
 describe('in-memory service request repository (idempotency + draft exclusion)', () => {
-  it('creates a new card from a confirmed draft and assigns server-generated fields', () => {
+  it('creates a new card from a confirmed draft and assigns server-generated fields', async () => {
     const repo = new InMemoryServiceRequestRepository();
-    const created = repo.create({
+    const created = await repo.create({
       seniorId: 'senior-1', type: 'hospital_escort', summary: '요약', transcript: '원문', inputType: 'voice',
       details: { destination: '충남대학교병원' }, missingFields: [], idempotencyKey: 'key-1',
     });
@@ -64,32 +64,32 @@ describe('in-memory service request repository (idempotency + draft exclusion)',
     expect(created.createdAt).toBeTruthy();
   });
 
-  it('does not create a duplicate card when the same idempotency key is resent', () => {
+  it('does not create a duplicate card when the same idempotency key is resent', async () => {
     const repo = new InMemoryServiceRequestRepository();
-    const first = repo.create({ seniorId: 'senior-1', type: 'welfare_info', summary: 's', transcript: 't', inputType: 'text', details: {}, missingFields: [], idempotencyKey: 'dup-key' });
-    const second = repo.create({ seniorId: 'senior-1', type: 'welfare_info', summary: 's', transcript: 't', inputType: 'text', details: {}, missingFields: [], idempotencyKey: 'dup-key' });
+    const first = await repo.create({ seniorId: 'senior-1', type: 'welfare_info', summary: 's', transcript: 't', inputType: 'text', details: {}, missingFields: [], idempotencyKey: 'dup-key' });
+    const second = await repo.create({ seniorId: 'senior-1', type: 'welfare_info', summary: 's', transcript: 't', inputType: 'text', details: {}, missingFields: [], idempotencyKey: 'dup-key' });
     expect(second.id).toBe(first.id);
-    expect(repo.list().filter((r) => r.id === first.id)).toHaveLength(1);
+    expect((await repo.list()).filter((r) => r.id === first.id)).toHaveLength(1);
   });
 
-  it('never lists a draft — draft is client-only and never persisted', () => {
+  it('never lists a draft — draft is client-only and never persisted', async () => {
     const repo = new InMemoryServiceRequestRepository();
-    repo.create({ seniorId: 'senior-1', type: 'daily_help', summary: 's', transcript: 't', inputType: 'text', details: {}, missingFields: [], idempotencyKey: 'k2' });
-    expect(repo.list().every((r) => (r.status as RequestStatus) !== 'draft')).toBe(true);
+    await repo.create({ seniorId: 'senior-1', type: 'daily_help', summary: 's', transcript: 't', inputType: 'text', details: {}, missingFields: [], idempotencyKey: 'k2' });
+    expect((await repo.list()).every((r) => (r.status as RequestStatus) !== 'draft')).toBe(true);
   });
 
-  it('rejects a disallowed transition and does not mutate the card', () => {
+  it('rejects a disallowed transition and does not mutate the card', async () => {
     const repo = new InMemoryServiceRequestRepository();
-    const created = repo.create({ seniorId: 'senior-1', type: 'hospital_escort', summary: 's', transcript: 't', inputType: 'voice', details: {}, missingFields: [], idempotencyKey: 'k3' });
-    expect(() => repo.transition(created.id, 'done')).toThrow();
-    const stillNew = repo.list().find((r) => r.id === created.id);
+    const created = await repo.create({ seniorId: 'senior-1', type: 'hospital_escort', summary: 's', transcript: 't', inputType: 'voice', details: {}, missingFields: [], idempotencyKey: 'k3' });
+    await expect(repo.transition(created.id, 'done')).rejects.toThrow();
+    const stillNew = (await repo.list()).find((r) => r.id === created.id);
     expect(stillNew?.status).toBe('new');
   });
 
-  it('rejects the senior cancelling a card once it is in_progress', () => {
+  it('rejects the senior cancelling a card once it is in_progress', async () => {
     const repo = new InMemoryServiceRequestRepository();
-    const created = repo.create({ seniorId: 'senior-1', type: 'hospital_escort', summary: 's', transcript: 't', inputType: 'voice', details: {}, missingFields: [], idempotencyKey: 'k4' });
-    repo.transition(created.id, 'in_progress');
-    expect(() => repo.cancel(created.id, 'senior')).toThrow();
+    const created = await repo.create({ seniorId: 'senior-1', type: 'hospital_escort', summary: 's', transcript: 't', inputType: 'voice', details: {}, missingFields: [], idempotencyKey: 'k4' });
+    await repo.transition(created.id, 'in_progress');
+    await expect(repo.cancel(created.id, 'senior')).rejects.toThrow();
   });
 });

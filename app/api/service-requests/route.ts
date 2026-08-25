@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   const parsed = createSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '요청 내용은 본인 확인 후 보낼 수 있어요.' }, { status: 400 });
   const { confirmed: _confirmed, ...input } = parsed.data;
-  const created = serviceRequests.create({ seniorId: demoSeniorId, ...input });
+  const created = await serviceRequests.create({ seniorId: demoSeniorId, ...input });
   return NextResponse.json({ ...created, is_demo: true }, { status: 201 });
 }
 
@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   const actor = demoActor(request);
-  const all = serviceRequests.list();
+  const all = await serviceRequests.list();
   const scoped = actor.role === 'senior'
-    ? serviceRequests.listForSenior(actor.id)
+    ? await serviceRequests.listForSenior(actor.id)
     : actor.role === 'worker'
       ? all.filter((row) => seniorIdsAssignedTo(actor.id).includes(row.seniorId))
       : all.filter((row) => seniorIdsAssignedTo('worker-demo-001').includes(row.seniorId) || row.seniorId === demoSeniorId);

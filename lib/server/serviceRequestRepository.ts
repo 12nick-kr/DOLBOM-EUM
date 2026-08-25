@@ -15,17 +15,20 @@ export type CreateServiceRequestInput = {
 
 /**
  * 요청 카드 정본 저장소 포트. PRD §11.4/TDD §3.9: 실시간은 최적화이고 정본은 항상 이 저장소의 조회다.
- * 실제 구현(Supabase Postgres)이 붙기 전까지 테스트와 API route는 이 in-memory fake로 동작한다.
+ * PRD §11.5(v1.4)부터 Supabase Postgres 어댑터(`SupabaseServiceRequestRepository`)가 자격증명이
+ * 있을 때의 운영 구현이다 — 모든 메서드가 `Promise`를 반환하는 이유는 실제 DB 왕복을 반영하기
+ * 위함이며, `InMemoryServiceRequestRepository`는 동기 로직을 `Promise.resolve`로 감싸 같은
+ * 인터페이스를 만족한다(테스트는 여전히 실제 네트워크 없이 즉시 resolve된다).
  */
 export interface ServiceRequestRepository {
-  list(): ServiceRequest[];
-  listForSenior(seniorId: string): ServiceRequest[];
-  listForAssignee(assigneeId: string): ServiceRequest[];
-  get(id: string): ServiceRequest | undefined;
-  create(input: CreateServiceRequestInput): ServiceRequest;
-  transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): ServiceRequest;
-  acknowledge(id: string, workerId: string): ServiceRequest;
-  cancel(id: string, actor: Role): ServiceRequest;
+  list(): Promise<ServiceRequest[]>;
+  listForSenior(seniorId: string): Promise<ServiceRequest[]>;
+  listForAssignee(assigneeId: string): Promise<ServiceRequest[]>;
+  get(id: string): Promise<ServiceRequest | undefined>;
+  create(input: CreateServiceRequestInput): Promise<ServiceRequest>;
+  transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): Promise<ServiceRequest>;
+  acknowledge(id: string, workerId: string): Promise<ServiceRequest>;
+  cancel(id: string, actor: Role): Promise<ServiceRequest>;
   onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest }) => void): () => void;
 }
 
@@ -48,23 +51,23 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     for (const listener of this.listeners) listener(event);
   }
 
-  list(): ServiceRequest[] {
+  async list(): Promise<ServiceRequest[]> {
     return [...this.rows];
   }
 
-  listForSenior(seniorId: string): ServiceRequest[] {
+  async listForSenior(seniorId: string): Promise<ServiceRequest[]> {
     return this.rows.filter((row) => row.seniorId === seniorId);
   }
 
-  listForAssignee(assigneeId: string): ServiceRequest[] {
+  async listForAssignee(assigneeId: string): Promise<ServiceRequest[]> {
     return this.rows.filter((row) => row.assigneeId === assigneeId);
   }
 
-  get(id: string): ServiceRequest | undefined {
+  async get(id: string): Promise<ServiceRequest | undefined> {
     return this.rows.find((row) => row.id === id);
   }
 
-  create(input: CreateServiceRequestInput): ServiceRequest {
+  async create(input: CreateServiceRequestInput): Promise<ServiceRequest> {
     const existingId = this.idempotency.get(input.idempotencyKey);
     if (existingId) {
       const existing = this.rows.find((row) => row.id === existingId);
@@ -94,7 +97,7 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     return created;
   }
 
-  transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): ServiceRequest {
+  async transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): Promise<ServiceRequest> {
     const row = this.rows.find((item) => item.id === id);
     if (!row) throw new Error('요청을 찾을 수 없습니다.');
     if (!canTransitionRequest(row.status, to)) throw new Error(`허용되지 않은 상태 전이입니다: ${row.status} -> ${to}`);
@@ -105,7 +108,7 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     return row;
   }
 
-  acknowledge(id: string, workerId: string): ServiceRequest {
+  async acknowledge(id: string, workerId: string): Promise<ServiceRequest> {
     const row = this.rows.find((item) => item.id === id);
     if (!row) throw new Error('요청을 찾을 수 없습니다.');
     if (!row.acknowledgedAt) row.acknowledgedAt = new Date().toISOString();
@@ -115,7 +118,7 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     return row;
   }
 
-  cancel(id: string, actor: Role): ServiceRequest {
+  async cancel(id: string, actor: Role): Promise<ServiceRequest> {
     const row = this.rows.find((item) => item.id === id);
     if (!row) throw new Error('요청을 찾을 수 없습니다.');
     if (!canCancelRequest(actor, row.status)) throw new Error('이 상태에서는 취소할 수 없습니다.');
