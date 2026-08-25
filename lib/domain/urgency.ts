@@ -39,18 +39,31 @@ const attentionPatterns: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /(넘어졌|넘어졌어|넘어졌는데)/, reason: '낙상 가능성' },
 ];
 
+/** attention 패턴 오탐 방지 — "안 넘어졌어요", "어지럽지 않아요" 같은 부정 표현은 제외한다. */
+const attentionNegationPatterns: RegExp[] = [
+  /(안|못).{0,2}넘어졌/,
+  /넘어졌.{0,4}(아니|않)/,
+  /(어지럽|어지러|현기증).{0,6}(아니|않)/,
+  /(약을|약이).{0,8}(잘못|많이|두번|두 번).{0,6}(아니|않)/,
+];
+
 export type SafetyRisk = { level: 'normal' | 'attention' | 'emergency'; reasons: string[] };
 
 export function detectSafetyRisk(text: string): SafetyRisk {
   const compact = text.replace(/\s/g, '');
   const emergency = emergencyPatterns.some((pattern) => pattern.test(compact)) && !isNegated(compact);
   if (emergency) return { level: 'emergency', reasons: ['즉시 안전 확인이 필요한 표현'] };
+  if (isAttentionNegated(compact)) return { level: 'normal', reasons: [] };
   const reasons = attentionPatterns.filter(({ pattern }) => pattern.test(compact)).map(({ reason }) => reason);
   return reasons.length > 0 ? { level: 'attention', reasons } : { level: 'normal', reasons: [] };
 }
 
 function isNegated(text: string): boolean {
   return negationPatterns.some((pattern) => pattern.test(text));
+}
+
+function isAttentionNegated(text: string): boolean {
+  return attentionNegationPatterns.some((pattern) => pattern.test(text));
 }
 
 export function classifyUrgency(text: string): IntentResult {

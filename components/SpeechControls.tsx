@@ -24,6 +24,8 @@ export function SpeechControls({ text, assistantTurnId, speechToken, compact = f
   const onCompletedRef = useRef(onCompleted);
   const playRef = useRef<() => Promise<void>>(async () => undefined);
   const autoPlayedKeyRef = useRef('');
+  /** 늦게 도착한 이전 play() 호출의 fetch 응답이 나중에 시작된 재생을 덮어쓰지 않도록 막는 세대 토큰. */
+  const playGenerationRef = useRef(0);
   onCompletedRef.current = onCompleted;
 
   const releaseAudioUrl = () => {
@@ -55,6 +57,7 @@ export function SpeechControls({ text, assistantTurnId, speechToken, compact = f
    */
   const play = async () => {
     if (!enabled) return;
+    const generation = ++playGenerationRef.current;
     window.speechSynthesis?.cancel();
     audioRef.current?.pause();
     releaseAudioUrl();
@@ -75,10 +78,12 @@ export function SpeechControls({ text, assistantTurnId, speechToken, compact = f
         signal: controller.signal,
       });
       clearTimeout(timer);
+      if (generation !== playGenerationRef.current) return;
       if (!res.ok) { speakWithBrowser(); return; }
       const contentType = res.headers.get('content-type') ?? '';
       if (contentType.includes('audio')) {
         const buffer = await res.arrayBuffer();
+        if (generation !== playGenerationRef.current) return;
         const url = URL.createObjectURL(new Blob([buffer], { type: contentType }));
         objectUrlRef.current = url;
         const audio = new Audio(url);
@@ -93,7 +98,7 @@ export function SpeechControls({ text, assistantTurnId, speechToken, compact = f
       speakWithBrowser();
     } catch {
       clearTimeout(timer);
-      speakWithBrowser();
+      if (generation === playGenerationRef.current) speakWithBrowser();
     }
   };
   playRef.current = play;

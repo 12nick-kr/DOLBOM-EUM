@@ -31,6 +31,7 @@ export function WorkerDashboard() {
   const [isEditingMemo, setIsEditingMemo] = useState(false);
   const [memoDraft, setMemoDraft] = useState('');
   const [savingMemo, setSavingMemo] = useState(false);
+  const [statusChangingIds, setStatusChangingIds] = useState<Set<string>>(new Set());
   const { emergencies, removeEmergencyOptimistically, restoreEmergency } = useEmergencyList();
   const [deleteEmergencyTarget, setDeleteEmergencyTarget] = useState<EmergencyEvent | null>(null);
   const [deletingEmergencyId, setDeletingEmergencyId] = useState<string | null>(null);
@@ -54,6 +55,9 @@ export function WorkerDashboard() {
 
   const filtered = useMemo(() => requests.filter((item) => (filter === '전체' || (filter === '신규' && item.status === 'new') || (filter === '진행중' && item.status === 'in_progress') || (filter === '완료' && item.status === 'done')) && (scheduleFilter === 'all' || (item.status !== 'done' && scheduleStateFor(item) === scheduleFilter))), [requests, filter, scheduleFilter]);
   const selected = requests.find((request) => request.id === selectedId) ?? null;
+  useEffect(() => {
+    if (page === 'request' && !selected && !isLoading) setPage('inbox');
+  }, [page, selected, isLoading]);
   const activeEmergencies = emergencies.filter((event) => event.status !== 'closed');
   const latestEmergency = activeEmergencies[0] ?? null;
   const openRequest = (id: string) => {
@@ -68,16 +72,19 @@ export function WorkerDashboard() {
       })
       .catch(() => refetch());
   };
-  const takeCharge = async (id: string) => {
-    const response = await fetch(`/api/service-requests/${id}/take-charge`, { method: 'POST' });
-    if (!response.ok) return;
-    upsertOptimistically(await response.json());
+  const changeStatus = async (id: string, path: 'take-charge' | 'complete') => {
+    if (statusChangingIds.has(id)) return;
+    setStatusChangingIds((previous) => new Set(previous).add(id));
+    try {
+      const response = await fetch(`/api/service-requests/${id}/${path}`, { method: 'POST' });
+      if (!response.ok) return;
+      upsertOptimistically(await response.json());
+    } finally {
+      setStatusChangingIds((previous) => { const next = new Set(previous); next.delete(id); return next; });
+    }
   };
-  const completeRequest = async (id: string) => {
-    const response = await fetch(`/api/service-requests/${id}/complete`, { method: 'POST' });
-    if (!response.ok) return;
-    upsertOptimistically(await response.json());
-  };
+  const takeCharge = (id: string) => changeStatus(id, 'take-charge');
+  const completeRequest = (id: string) => changeStatus(id, 'complete');
   const startEditingMemo = (currentMemo: string) => { setMemoDraft(currentMemo); setIsEditingMemo(true); };
   const saveMemo = async (id: string) => {
     if (savingMemo) return;
@@ -96,8 +103,8 @@ export function WorkerDashboard() {
   /** 인박스 카드·통계 모달이 함께 쓰는 상태 변경 2버튼. 현재 상태에 맞는 다음 전이 버튼만 활성화한다. */
   const statusActions = (request: ServiceRequest) => request.status === 'done' || request.status === 'rejected' ? null : (
     <div className="status-actions">
-      {request.status === 'new' && <button className="status-action" onClick={() => takeCharge(request.id)}>진행중으로 변경</button>}
-      {request.status === 'in_progress' && <button className="status-action" onClick={() => completeRequest(request.id)}>완료 처리</button>}
+      {request.status === 'new' && <button className="status-action" onClick={() => takeCharge(request.id)} disabled={statusChangingIds.has(request.id)}>진행중으로 변경</button>}
+      {request.status === 'in_progress' && <button className="status-action" onClick={() => completeRequest(request.id)} disabled={statusChangingIds.has(request.id)}>완료 처리</button>}
     </div>
   );
   const askDelete = (id: string) => { const target = requests.find((item) => item.id === id); if (target) { setDeleteError(''); setDeleteTarget(target); } };

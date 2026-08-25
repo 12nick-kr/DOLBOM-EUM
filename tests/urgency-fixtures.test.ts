@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyUrgency } from '@/lib/domain/urgency';
+import { classifyUrgency, detectSafetyRisk } from '@/lib/domain/urgency';
 
 // PRD §20 안전 테스트: "긴급 발화 20개와 비긴급 유사 발화 20개 비교" — 재현율 100% 목표(§21).
 const urgent = [
@@ -55,6 +55,8 @@ const nonUrgent = [
   '짐 옮기는 것 좀 도와주세요',
   '119동 사람이 전화했어요',
   '119동에 사는 사람한테 전화해줘',
+  '안 넘어졌어요, 그냥 산책했어요',
+  '어지럽지 않아요, 오늘은 컨디션이 좋아요',
 ];
 
 describe('emergency language regression fixtures (PRD §20/§21: 20 urgent + 20 non-urgent)', () => {
@@ -69,5 +71,17 @@ describe('emergency language regression fixtures (PRD §20/§21: 20 urgent + 20 
   it('produces zero false positives across all non-urgent fixtures', () => {
     const results = nonUrgent.map((text) => classifyUrgency(text).urgency === 'emergency');
     expect(results.some(Boolean)).toBe(false);
+  });
+});
+
+describe('attention-level negation (부정 표현이 낙상/어지럼 오탐을 attention으로 잘못 올리지 않는지)', () => {
+  it('does not flag negated fall/dizziness mentions as attention', () => {
+    expect(detectSafetyRisk('안 넘어졌어요, 그냥 산책했어요').level).toBe('normal');
+    expect(detectSafetyRisk('어지럽지 않아요, 오늘은 컨디션이 좋아요').level).toBe('normal');
+  });
+
+  it('still flags a genuine fall/dizziness mention as attention', () => {
+    expect(detectSafetyRisk('아까 넘어졌어요').level).toBe('attention');
+    expect(detectSafetyRisk('어지러워요').level).toBe('attention');
   });
 });
