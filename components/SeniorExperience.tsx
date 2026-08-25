@@ -99,6 +99,7 @@ export function SeniorExperience() {
   const [requestDraft, setRequestDraftState] = useState<ServiceRequestDraft | null>(null);
   const [requestError, setRequestError] = useState('');
   const [callConfirmed, setCallConfirmed] = useState(false);
+  const [closeConfirmPending, setCloseConfirmPending] = useState(false);
   const [notified, setNotified] = useState<{ family: boolean; worker: boolean }>({ family: false, worker: false });
   const [activeEmergencyId, setActiveEmergencyId] = useState<string | null>(null);
   const [emergencyUtterance, setEmergencyUtterance] = useState('');
@@ -466,6 +467,7 @@ export function SeniorExperience() {
     setActiveEmergencyId(null);
     emergencyCreateRef.current = null;
     setCallConfirmed(false);
+    setCloseConfirmPending(false);
     setNotified({ family: false, worker: false });
     setEmergencyClosePending(false);
     setEmergencyError('');
@@ -499,6 +501,10 @@ export function SeniorExperience() {
       dispatch({ type: 'HOME' });
       return;
     }
+    if (!closeConfirmPending) {
+      setCloseConfirmPending(true);
+      return;
+    }
     setEmergencyClosePending(true);
     setEmergencyError('');
     try {
@@ -513,6 +519,7 @@ export function SeniorExperience() {
       dispatch({ type: 'HOME' });
     } catch {
       setEmergencyError('긴급 상황을 종료하지 못했어요. 화면을 유지하고 다시 시도해 주세요.');
+      setCloseConfirmPending(false);
     } finally {
       setEmergencyClosePending(false);
     }
@@ -538,7 +545,7 @@ export function SeniorExperience() {
     {screen.view === 'sent' && <section className="senior-panel"><div className="sent-timer" style={{ '--pct': (sentCountdown / 10) * 100 } as CSSProperties} aria-hidden="true"><span>{sentCountdown}</span></div><h1>담당자에게 보냈어요</h1><p>요청 카드가 전달됐어요. 담당자가 확인하면 상태가 바로 바뀌어요.</p><p className="notice" role="status">{sentCountdown}초 뒤 홈으로 돌아가요.</p><button className="primary wide" onClick={() => dispatch({ type: 'REQUESTS' })}>내 요청 보기</button></section>}
     {screen.view === 'info' && <section className="senior-panel"><div className="chat ai"><span>AI</span>{welfareInfoText}</div><SpeechControls text={welfareInfoText} autoPlay /><button className="primary wide" onClick={() => dispatch({ type: 'HOME' })}>확인했어요</button></section>}
     {screen.view === 'requests' && <section className="senior-panel"><h1>내 요청 보기</h1><div className="care-card-feed">{isLoading && myRequests.length === 0 && <p className="notice" role="status">요청을 불러오는 중이에요.</p>}{!isLoading && myRequests.length === 0 && <p className="notice">아직 보낸 요청이 없어요.</p>}{myRequests.map((item) => <CareRequestCard card={item} role="senior" key={item.id} />)}</div><button className="secondary wide" onClick={() => dispatch({ type: 'HOME' })}>홈으로</button></section>}
-    {screen.view === 'emergency' && <section className="emergency-screen"><p>긴급 도움이 필요할 수 있어요</p><h1>지금 119에<br />전화할까요?</h1><div className="emergency-summary">위치: 대전광역시 중구 (데모 위치)<br />발화: {emergencyUtterance || input}<br />시각: 방금 전</div>{emergencyError && <p className="emergency-error" role="alert">{emergencyError}</p>}{!callConfirmed ? <button className="call-button" onClick={() => setCallConfirmed(true)}>119 알리기</button> : <><a href="tel:119" className="call-button">119 전화 걸기</a><p className="emergency-call-note">전화 화면을 연 뒤에는 앱에서 실제 통화를 취소할 수 없어요.</p></>}<button onClick={() => { void notify('family'); void notify('worker'); }} disabled={notified.family && notified.worker}>{notified.family && notified.worker ? '가족·복지사에게 알림 전달됨' : '가족·복지사에게 알리기'}</button><button onClick={() => void closeEmergency()} disabled={emergencyClosePending}>{emergencyClosePending ? '종료하는 중' : '홈으로'}</button></section>}
+    {screen.view === 'emergency' && <section className="emergency-screen"><p>긴급 도움이 필요할 수 있어요</p><h1>지금 119에<br />전화할까요?</h1><div className="emergency-summary">위치: 대전광역시 중구 (데모 위치)<br />발화: {emergencyUtterance || input}<br />시각: 방금 전</div>{emergencyError && <p className="emergency-error" role="alert">{emergencyError}</p>}{!callConfirmed ? <button className="call-button" onClick={() => setCallConfirmed(true)}>119 알리기</button> : <><a href="tel:119" className="call-button">119 전화 걸기</a><p className="emergency-call-note">전화 화면을 연 뒤에는 앱에서 실제 통화를 취소할 수 없어요.</p></>}<button onClick={() => { void notify('family'); void notify('worker'); }} disabled={notified.family && notified.worker}>{notified.family && notified.worker ? '가족·복지사에게 알림 전달됨' : '가족·복지사에게 알리기'}</button><button onClick={() => void closeEmergency()} disabled={emergencyClosePending}>{emergencyClosePending ? '종료하는 중' : closeConfirmPending ? '정말 종료할까요? 다시 누르면 종료돼요' : '홈으로'}</button></section>}
     {showFooter && <footer className="senior-footer"><button className="emergency-dock-action" onClick={openEmergency}>긴급 도움</button><nav className="senior-nav" aria-label="노인 화면 메뉴"><button onClick={() => { cancelPendingRequests(); dispatch({ type: 'HOME' }); }}>홈</button><button onClick={() => { cancelPendingRequests(); dispatch({ type: 'REQUESTS' }); }}>내 요청</button></nav></footer>}
   </main>;
 }

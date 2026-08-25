@@ -257,8 +257,21 @@ describe('senior accessible entry', () => {
     fireEvent.click(screen.getByRole('button', { name: '가족·복지사에게 알리기' }));
     await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/emergencies')).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: '홈으로' }));
+    fireEvent.click(screen.getByRole('button', { name: '정말 종료할까요? 다시 누르면 종료돼요' }));
     await screen.findByRole('button', { name: '말하기 시작' });
     const closeCall = fetchMock.mock.calls.find((call) => String(call[0]).startsWith('/api/emergencies/') && call[1]?.method === 'PATCH');
     expect(JSON.parse(String(closeCall?.[1]?.body))).toMatchObject({ status: 'closed', closeReason: 'senior_cancelled' });
+  });
+
+  it('does not close an active emergency on a single accidental "홈으로" tap — requires a second confirming tap', async () => {
+    const fetchMock = stubFetch();
+    render(<SeniorExperience />);
+    fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
+    fireEvent.click(screen.getByRole('button', { name: '가족·복지사에게 알리기' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/emergencies')).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: '홈으로' }));
+    await screen.findByRole('button', { name: '정말 종료할까요? 다시 누르면 종료돼요' });
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).startsWith('/api/emergencies/') && call[1]?.method === 'PATCH')).toBe(false);
+    expect(screen.getByRole('heading')).toHaveTextContent('지금 119에전화할까요?');
   });
 });

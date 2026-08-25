@@ -12,12 +12,14 @@
   --red-bg: #ffedee;
   --amber: #ff9f1a;
   --amber-bg: #fff4e1;
+  --amber-strong: #a15c00; /* amber pill 텍스트용 — 배경 대비 4.5:1 이상 확보 */
   --mint: #01c88e;
   --mint-bg: #e3fbf3;
+  --mint-strong: #007a57; /* mint pill 텍스트용 — 배경 대비 4.5:1 이상 확보 */
 
   --ink: #191f28;
   --ink-2: #4e5968;
-  --ink-3: #8b95a1;
+  --ink-3: #5e6b78; /* 저시력 사용자를 위해 surface/bg-alt 위에서 4.5:1 대비를 만족하도록 조정 */
 
   --line: #e5e8eb;
   --surface: #ffffff;
@@ -182,8 +184,8 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 /* 상태 배지 */
 .pill { display: inline-flex; width: fit-content; border-radius: var(--radius-pill); padding: var(--space-4) var(--space-12); font: var(--text-label); }
 .pill.red { background: var(--red-bg); color: var(--red); }
-.pill.amber { background: var(--amber-bg); color: var(--amber); }
-.pill.mint { background: var(--mint-bg); color: var(--mint); }
+.pill.amber { background: var(--amber-bg); color: var(--amber-strong); }
+.pill.mint { background: var(--mint-bg); color: var(--mint-strong); }
 .pill.blue { background: var(--blue-bg); color: var(--blue-strong); }
 .pill.gray { background: var(--bg-alt); color: var(--ink-2); }
 
