@@ -18,9 +18,22 @@ describe('PollingRealtimeClient — runtime bridge without a live Supabase conne
     const fetchList = vi.fn().mockResolvedValue([card({ id: 'r1' })]);
     const client = new PollingRealtimeClient(fetchList, 1000);
     const events: string[] = [];
-    client.subscribe((e) => events.push(`${e.type}:${e.request.id}`));
-    await vi.advanceTimersByTimeAsync(1000);
+    client.subscribe((e) => { if (e.type !== 'delete') events.push(`${e.type}:${e.request.id}`); });
+    await vi.advanceTimersByTimeAsync(0);
     expect(events).toEqual(['insert:r1']);
+    client.dispose();
+  });
+
+  it('emits a delete event when a previously known card disappears', async () => {
+    const fetchList = vi.fn()
+      .mockResolvedValueOnce([card({ id: 'r1' })])
+      .mockResolvedValueOnce([]);
+    const client = new PollingRealtimeClient(fetchList, 1000);
+    const events: string[] = [];
+    client.subscribe((event) => events.push(event.type === 'delete' ? `delete:${event.id}` : `${event.type}:${event.request.id}`));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(events).toEqual(['insert:r1', 'delete:r1']);
     client.dispose();
   });
 
@@ -31,7 +44,7 @@ describe('PollingRealtimeClient — runtime bridge without a live Supabase conne
       .mockResolvedValueOnce([card({ id: 'r1', status: 'in_progress', updatedAt: '2026-08-25T01:00:00Z' })]);
     const client = new PollingRealtimeClient(fetchList, 1000);
     const events: string[] = [];
-    client.subscribe((e) => events.push(`${e.type}:${e.request.status}`));
+    client.subscribe((e) => { if (e.type !== 'delete') events.push(`${e.type}:${e.request.status}`); });
     await vi.advanceTimersByTimeAsync(1000);
     await vi.advanceTimersByTimeAsync(1000);
     await vi.advanceTimersByTimeAsync(1000);
@@ -44,7 +57,7 @@ describe('PollingRealtimeClient — runtime bridge without a live Supabase conne
     const client = new PollingRealtimeClient(fetchList, 1000);
     const states: string[] = [];
     client.onConnectionChange((s) => states.push(s));
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(0);
     expect(states).toEqual(['disconnected']);
     await vi.advanceTimersByTimeAsync(1000);
     expect(states).toEqual(['disconnected', 'connected']);

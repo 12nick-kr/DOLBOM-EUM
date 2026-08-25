@@ -32,11 +32,11 @@ OpenAI·Supabase 자격증명이 모두 있으면 실제 어댑터를 사용하�
 - 긴급 판단은 고정 규칙과 부정 표현을 함께 적용하며, 자동 신고나 `신고 완료` 표시는 하지 않습니다.
 - TTS는 답변 텍스트를 먼저 보이고 Web Speech API 폴백을 제공합니다. 긴급 버튼은 TTS 실패에도 유지됩니다.
 - 문서는 PDF/JPEG/PNG, 5MB, magic bytes를 검증하고 UUID 기반 private-path 계약만 제공합니다. 실제 문서·Base64·OCR/AI 전송은 지원하지 않습니다.
-- `supabase/migrations/0001_demo_schema.sql`~`0003_senior_input_events.sql`은 저장소에 포함되지만 실제 프로젝트 적용은 소유자가 수행합니다.
+- `supabase/migrations/0001_demo_schema.sql`~`0004_service_request_delete.sql`은 저장소에 포함되지만 실제 프로젝트 적용은 소유자가 수행합니다.
 
 ## 알려진 제한과 배포 전 점검
 
-- `0003_senior_input_events.sql`을 실제 Supabase 프로젝트에 적용하기 전에는 새 통합 입력 API를 운영 환경에서 사용할 수 없습니다.
-- Supabase Auth 세션이 있으면 브라우저가 사용자 JWT로 Realtime을 구독하고, 세션·연결이 없으면 3초 폴링으로 자동 복구합니다. 데모 역할 쿠키는 실제 사용자 인증을 대신하지 않습니다.
+- `0003_senior_input_events.sql`과 `0004_service_request_delete.sql`을 실제 Supabase 프로젝트에 순서대로 적용하기 전에는 통합 입력과 복지사 hard delete를 운영 환경에서 사용할 수 없습니다.
+- 서버가 Supabase `postgres_changes`를 구독해 역할별로 정제한 SSE 이벤트를 전달합니다. 연결이 없으면 즉시 시작하는 1초 폴링으로 자동 복구하며, push가 연결되면 폴링을 멈춥니다. 데모 역할 쿠키는 실제 사용자 인증을 대신하지 않습니다.
 - 실사용 전에는 Supabase RLS 정책/비공개 Storage, 외부 키 권한, 공공 API 최신성, 고령자 접근성 테스트, 개인정보·법률 검토를 완료해야 합니다.
 - 실제 119 전화는 기기의 `tel:` 처리에 따라 다릅니다. 데모에서는 발신 직전 화면만 제공합니다.

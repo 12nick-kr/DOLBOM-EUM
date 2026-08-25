@@ -375,3 +375,18 @@
   - `npm run build`: 20개 정적/동적 경로 생성 통과. 오래된 `.next` 캐시에서 한 번 PageNotFound가 발생해 캐시를 격리한 뒤 클린 빌드 통과.
   - 외부 자격증명을 비운 로컬 어댑터로 `npm run test:e2e`: 4개 통과. 노인→가족·복지사 카드 공유→복지사 상태 변경→노인 상태 반영을 서로 다른 브라우저 컨텍스트로 검증했다.
 - 외부 변경: 실제 Supabase migration은 실행하지 않았다. 운영 반영 전 소유자가 `0003_senior_input_events.sql`을 적용하고 Realtime publication 및 Auth/RLS 세션을 검증해야 한다.
+
+## 2026-08-25 — 즉시 동기화와 복지사 요청 hard delete
+
+- 목표: 열린 가족·복지사 화면에 요청/긴급 변경을 더 빠르게 반영하고, 담당 복지사가 카드 우상단에서 요청 카드와 연결 JSON을 서버에서 함께 삭제할 수 있게 한다.
+- Red: 목록 스냅샷 삭제 반영, delete tombstone, 폴링 즉시 시작/삭제 감지, delete 이벤트 훅 반영, worker-only 카드 삭제 버튼, DELETE API 권한 테스트를 추가했다. 초기 실행은 메서드·이벤트·API·UI 부재로 7건 실패했다.
+- Green:
+  - `RequestListStore`에 `replaceSnapshot`, `remove`, tombstone, rollback 복구를 추가했다. 늦은 update가 삭제된 카드를 되살리지 않으며 전체 GET에서 사라진 행도 제거한다.
+  - 폴링은 마운트 직후 실행하고 기본 간격을 1초로 줄였다. Supabase push가 연결되면 `ResilientRealtimeClient`가 폴링을 중지하고 연결이 끊길 때만 재개한다.
+  - `/api/care-events`가 서버의 service key로 Supabase `postgres_changes`를 구독해 역할·담당 범위와 가족 원문 redaction을 적용한 SSE 이벤트만 브라우저에 전달한다. 과거 실패한 프로세스 내부 pub/sub와 달리 Supabase가 외부 공유 브로커다.
+  - 요청 생성/담당 맡기/삭제는 API 응답을 React 저장소에 즉시 반영한다. 긴급 목록도 SSE 신호 수신 즉시 재조회하고, publication 누락 시에도 안전하도록 1초 정본 조회를 유지한다. 초기 로딩과 실제 0건 화면을 분리했다.
+  - `DELETE /api/service-requests/:id`, repository delete 계약, worker 담당 관계 검증, 공통 카드 우상단 삭제 버튼, 확인 모달, 낙관적 제거/실패 복구를 구현했다.
+  - `0004_service_request_delete.sql`은 연결된 `senior_input_events`를 cascade 삭제하고 최소 감사 로그를 같은 DB 함수 트랜잭션에서 기록한다. `service_requests`/`emergency_events` DELETE payload의 담당 범위 판별을 위해 replica identity와 Realtime publication도 정리한다.
+- 디자인: 카드 헤더 flex의 `margin-left:auto`로 삭제 버튼을 우상단에 배치해 `DESIGN.md`의 카드 내부 absolute 금지 규칙을 지켰다. 위험 색·간격·터치 크기는 기존 토큰만 사용했다.
+- 검증: `npm test -- --run` 29개 파일/183개 테스트, typecheck, lint, build 통과. 외부 자격증명을 비운 in-memory E2E 4개가 통과했고 마지막 시나리오는 노인 생성→가족/복지사 반영→복지사 상태 변경→노인 반영→복지사 삭제→세 화면 제거까지 검증한다. 실제 Chrome에서도 카드 우상단 삭제 버튼과 서버 JSON 삭제 경고 모달, 취소 후 원상 유지, 콘솔 오류 없음을 확인했다.
+- 외부 변경: 실제 Supabase에는 `0004_service_request_delete.sql`을 적용하지 않았다. 적용 전 운영 DB 삭제 RPC와 긴급 Realtime publication은 사용할 수 없고 1초 폴링이 계속 폴백한다.

@@ -15,8 +15,8 @@ describe('in-memory realtime adapter (PRD §11.4, TDD §3.9)', () => {
     const adapter = new InMemoryRealtimeAdapter();
     const received: ServiceRequest[] = [];
     const unrelated: ServiceRequest[] = [];
-    adapter.subscribe({ seniorIds: ['senior-1'] }, (event) => received.push(event.request));
-    adapter.subscribe({ seniorIds: ['senior-2'] }, (event) => unrelated.push(event.request));
+    adapter.subscribe({ seniorIds: ['senior-1'] }, (event) => { if (event.type !== 'delete') received.push(event.request); });
+    adapter.subscribe({ seniorIds: ['senior-2'] }, (event) => { if (event.type !== 'delete') unrelated.push(event.request); });
 
     adapter.publish({ type: 'insert', request: card({ seniorId: 'senior-1' }) });
 
@@ -27,7 +27,7 @@ describe('in-memory realtime adapter (PRD §11.4, TDD §3.9)', () => {
   it('does not subscribe a worker with no assigned relationship to any events at all (no client-side filtering fallback)', () => {
     const adapter = new InMemoryRealtimeAdapter();
     const received: ServiceRequest[] = [];
-    adapter.subscribe({ seniorIds: [] }, (event) => received.push(event.request));
+    adapter.subscribe({ seniorIds: [] }, (event) => { if (event.type !== 'delete') received.push(event.request); });
     adapter.publish({ type: 'insert', request: card({ seniorId: 'senior-1' }) });
     expect(received).toHaveLength(0);
   });
@@ -35,7 +35,7 @@ describe('in-memory realtime adapter (PRD §11.4, TDD §3.9)', () => {
   it('lets a subscriber unsubscribe and stop receiving events', () => {
     const adapter = new InMemoryRealtimeAdapter();
     const received: ServiceRequest[] = [];
-    const unsubscribe = adapter.subscribe({ seniorIds: ['senior-1'] }, (event) => received.push(event.request));
+    const unsubscribe = adapter.subscribe({ seniorIds: ['senior-1'] }, (event) => { if (event.type !== 'delete') received.push(event.request); });
     unsubscribe();
     adapter.publish({ type: 'insert', request: card({ seniorId: 'senior-1' }) });
     expect(received).toHaveLength(0);
@@ -53,7 +53,7 @@ describe('in-memory realtime adapter (PRD §11.4, TDD §3.9)', () => {
   it('does not deliver events while disconnected', () => {
     const adapter = new InMemoryRealtimeAdapter();
     const received: ServiceRequest[] = [];
-    adapter.subscribe({ seniorIds: ['senior-1'] }, (event) => received.push(event.request));
+    adapter.subscribe({ seniorIds: ['senior-1'] }, (event) => { if (event.type !== 'delete') received.push(event.request); });
     adapter.disconnect();
     adapter.publish({ type: 'insert', request: card({ seniorId: 'senior-1' }) });
     expect(received).toHaveLength(0);

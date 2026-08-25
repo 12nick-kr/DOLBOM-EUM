@@ -49,6 +49,14 @@ describe('useServiceRequestList — worker inbox realtime sync (Phase 4 key deli
     await waitFor(() => expect(screen.getByTestId('unread')).toHaveTextContent('1'));
   });
 
+  it('removes a card immediately when a realtime delete event arrives', async () => {
+    const realtime = new FakeRealtimeClient();
+    render(<Harness realtime={realtime} />);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    act(() => { realtime.emit({ type: 'delete', id: 'seed', deletedAt: '2026-08-25T05:00:00Z' }); });
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
+  });
+
   it('does not clear the list when the realtime connection drops, and shows disconnected state', async () => {
     const realtime = new FakeRealtimeClient();
     render(<Harness realtime={realtime} />);

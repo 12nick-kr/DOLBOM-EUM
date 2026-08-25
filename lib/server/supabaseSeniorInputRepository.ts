@@ -72,4 +72,9 @@ export class SupabaseSeniorInputRepository implements SeniorInputRepository {
     if (error) throw new Error(`senior_input_events 긴급 연결 실패: ${error.message}`);
     return mapRowToSeniorInputEvent(data as SeniorInputRow);
   }
+
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client.from('senior_input_events').delete().eq('id', id);
+    if (error) throw new Error(`senior_input_events 삭제 실패: ${error.message}`);
+  }
 }

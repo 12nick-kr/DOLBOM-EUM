@@ -376,6 +376,8 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 }
 .care-request-card.unread { border-color: var(--blue); }
 .care-card-heading { display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
+.care-card-delete { margin-left: auto; min-height: var(--touch-min); padding: var(--space-8) var(--space-12); border: 1px solid var(--red); border-radius: var(--radius-control); color: var(--red); background: var(--surface); font: var(--text-label); }
+.care-card-delete:disabled { opacity: 0.6; }
 .care-card-summary { display: flex; align-items: center; gap: var(--space-8); font: var(--text-title); }
 .care-card-meta { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: var(--space-8) var(--space-12); margin: 0; }
 .care-card-meta dt { color: var(--ink-3); font: var(--text-label); }
@@ -384,6 +386,13 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 .care-card-actions { display: flex; gap: var(--space-8); flex-wrap: wrap; }
 .care-card-actions > * { min-height: var(--touch-min); padding: var(--space-8) var(--space-16); }
 .care-card-feed { display: grid; gap: var(--gap-stack); }
+.error-notice { color: var(--red); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--ink) 45%, transparent); display: grid; place-items: center; padding: var(--space-16); }
+.confirm-dialog { width: min(100%, 440px); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-24); display: grid; gap: var(--space-16); }
+.confirm-dialog h2 { margin: 0; font: var(--text-title); }
+.confirm-dialog p { margin: 0; font: var(--text-body); color: var(--ink-2); }
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8); }
+.confirm-actions button { min-height: var(--touch-min); border-radius: var(--radius-control); padding: var(--space-8) var(--space-16); font: var(--text-body); }
 
 .case-header { padding: var(--space-16); display: flex; gap: var(--space-16); align-items: center; }
 .case-header .profile { width: 56px; height: 56px; font-size: 22px; }

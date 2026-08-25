@@ -1,6 +1,8 @@
 import type { ServiceRequest } from '@/lib/domain/types';
 
-export type RealtimeClientEvent = { type: 'insert' | 'update'; request: ServiceRequest };
+export type RealtimeClientEvent =
+  | { type: 'insert' | 'update'; request: ServiceRequest }
+  | { type: 'delete'; id: string; deletedAt: string; seniorId?: string };
 export type RealtimeConnectionState = 'connected' | 'disconnected';
 
 /**
@@ -12,6 +14,8 @@ export interface RealtimeClientPort {
   subscribe(listener: (event: RealtimeClientEvent) => void): () => void;
   onConnectionChange(listener: (state: RealtimeConnectionState) => void): () => void;
   connectionState(): RealtimeConnectionState;
+  /** primary push가 연결된 동안 fallback 폴링을 멈추기 위한 선택적 수명주기 제어. */
+  setActive?(active: boolean): void;
   /** 하위 리소스(polling interval 등)를 정리한다. 컴포넌트 unmount 시 반드시 호출한다. */
   dispose(): void;
 }

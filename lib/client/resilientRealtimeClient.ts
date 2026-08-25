@@ -10,8 +10,12 @@ export class ResilientRealtimeClient implements RealtimeClientPort {
   constructor(private primary: RealtimeClientPort | null, private fallback: RealtimeClientPort) {
     for (const port of [primary, fallback].filter(Boolean) as RealtimeClientPort[]) {
       this.unsubs.push(port.subscribe((event) => this.eventListeners.forEach((listener) => listener(event))));
-      this.unsubs.push(port.onConnectionChange(() => this.emitState()));
+      this.unsubs.push(port.onConnectionChange(() => {
+        if (port === this.primary) this.fallback.setActive?.(this.primary?.connectionState() !== 'connected');
+        this.emitState();
+      }));
     }
+    this.fallback.setActive?.(this.primary?.connectionState() !== 'connected');
   }
 
   private emitState() { const state = this.connectionState(); for (const listener of this.stateListeners) listener(state); }

@@ -16,15 +16,18 @@ export type CareRequestCardProps = {
   seniorName?: string;
   onSelect?: () => void;
   actions?: ReactNode;
+  onDelete?: (id: string) => void;
+  deleting?: boolean;
 };
 
 /** 세 역할이 공유하는 요청 카드. 역할 차이는 메타 공개 범위와 행동 영역에만 둔다. */
-export function CareRequestCard({ card, role, unread = false, seniorName = '김순자 어르신', onSelect, actions }: CareRequestCardProps) {
+export function CareRequestCard({ card, role, unread = false, seniorName = '김순자 어르신', onSelect, actions, onDelete, deleting = false }: CareRequestCardProps) {
   return (
     <article className={`care-request-card${unread ? ' unread' : ''}`} data-density={role === 'senior' ? 'comfort' : 'standard'}>
       <div className="care-card-heading">
         <StatusPill status={statusLabelFor(role, card.status)} />
         {unread && <span className="pill blue">미확인</span>}
+        {role === 'worker' && onDelete && <button className="care-card-delete" aria-label="요청 삭제" disabled={deleting} onClick={() => onDelete(card.id)}>{deleting ? '삭제 중' : '삭제'}</button>}
       </div>
       <div>
         <p className="eyebrow">{typeLabel[card.type]}</p>

@@ -1,6 +1,6 @@
 import type { ServiceRequest } from '@/lib/domain/types';
 
-export type RealtimeEvent = { type: 'insert' | 'update'; request: ServiceRequest };
+export type RealtimeEvent = { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string };
 export type ConnectionState = 'connected' | 'disconnected';
 
 /** 구독 범위 — 담당 관계에 속한 senior 집합만 받는다 (PRD §11.4: 전체 테이블 구독 금지). */
@@ -36,7 +36,8 @@ export class InMemoryRealtimeAdapter implements RealtimePort {
   publish(event: RealtimeEvent): void {
     if (this.state === 'disconnected') return;
     for (const sub of this.subscriptions) {
-      if (sub.scope.seniorIds.includes(event.request.seniorId)) sub.listener(event);
+      const seniorId = event.type === 'delete' ? event.seniorId : event.request.seniorId;
+      if (sub.scope.seniorIds.includes(seniorId)) sub.listener(event);
     }
   }
 

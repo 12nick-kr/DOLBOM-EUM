@@ -58,5 +58,13 @@ test('one confirmed senior input becomes the same family and worker card, then s
   await senior.getByRole('button', { name: '내 요청 보기' }).click();
   await expect(senior.getByText('담당자가 확인 중이에요')).toBeVisible({ timeout: 7000 });
 
+  await worker.getByRole('button', { name: '요청 삭제' }).click();
+  const deleteDialog = worker.getByRole('dialog', { name: '이 요청을 삭제할까요?' });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole('button', { name: '삭제' }).click();
+  await expect(worker.locator('.care-request-card').filter({ hasText: summary })).toHaveCount(0);
+  await expect(family.locator('.care-request-card').filter({ hasText: summary })).toHaveCount(0, { timeout: 4000 });
+  await expect(senior.locator('.care-request-card').filter({ hasText: summary })).toHaveCount(0, { timeout: 4000 });
+
   await Promise.all([seniorContext.close(), familyContext.close(), workerContext.close()]);
 });

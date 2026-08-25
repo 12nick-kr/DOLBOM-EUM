@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { WorkerDashboard } from '@/components/WorkerDashboard';
 
@@ -33,5 +33,23 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     await act(async () => { await vi.advanceTimersByTimeAsync(3500); });
 
     await waitFor(() => expect(screen.getByText('병원 동행 도움이 필요해요.')).toBeVisible());
+  });
+
+  it('optimistically removes a card after the worker confirms server deletion', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [seedCard] }) };
+      if (url === '/api/emergencies') return { ok: true, json: async () => ({ data: [] }) };
+      if (String(url).includes('/api/service-requests/') && init?.method === 'DELETE') return { ok: true, json: async () => ({ deleted: true, id: seedCard.id }) };
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<WorkerDashboard />);
+    fireEvent.click(screen.getByRole('button', { name: /요청 업무함/ }));
+    await screen.findByText(seedCard.summary);
+    fireEvent.click(screen.getByRole('button', { name: '요청 삭제' }));
+    const dialog = screen.getByRole('dialog', { name: '이 요청을 삭제할까요?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(screen.queryByText(seedCard.summary)).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${seedCard.id}`, { method: 'DELETE' });
   });
 });

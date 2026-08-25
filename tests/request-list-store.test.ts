@@ -73,4 +73,19 @@ describe('client-side request list store (id-keyed upsert, PRD §11.4/TDD §3.9)
     expect(store.list().find((c) => c.id === 'r1')?.status).toBe('in_progress');
     expect(store.list().map((c) => c.id).sort()).toEqual(['r1', 'r2']);
   });
+
+  it('removes rows missing from an authoritative server snapshot', () => {
+    const store = new RequestListStore();
+    store.hydrate([card({ id: 'r1' }), card({ id: 'r2' })]);
+    store.replaceSnapshot([card({ id: 'r2' })]);
+    expect(store.list().map((c) => c.id)).toEqual(['r2']);
+  });
+
+  it('applies a delete tombstone and ignores a late stale update', () => {
+    const store = new RequestListStore();
+    store.upsert(card({ id: 'r1', updatedAt: '2026-08-25T02:00:00Z' }));
+    store.remove('r1', '2026-08-25T03:00:00Z');
+    store.upsert(card({ id: 'r1', updatedAt: '2026-08-25T04:00:00Z' }));
+    expect(store.list()).toEqual([]);
+  });
 });

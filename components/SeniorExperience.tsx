@@ -14,6 +14,7 @@ const typeLabel: Record<string, string> = { hospital_escort: '병원 동행 요�
 
 async function fetchMyRequests(): Promise<ServiceRequest[]> {
   const res = await fetch('/api/care-cards');
+  if (res.ok === false) throw new Error('내 요청 목록 조회 실패');
   const body = await res.json();
   return Array.isArray(body.data) ? body.data as ServiceRequest[] : [];
 }
@@ -35,7 +36,7 @@ export function SeniorExperience() {
   const [notified, setNotified] = useState<{ family: boolean; worker: boolean }>({ family: false, worker: false });
   const [activeEmergencyId, setActiveEmergencyId] = useState<string | null>(null);
   const realtime = useSeniorRealtime();
-  const { requests: myRequests, refetch: refetchMyRequests } = useServiceRequestList({ realtime, fetchList: fetchMyRequests });
+  const { requests: myRequests, isLoading, upsertOptimistically } = useServiceRequestList({ realtime, fetchList: fetchMyRequests });
 
   const ask = async (text: string, priorDraft?: ServiceRequestDraft, inputType: 'voice' | 'text' = priorDraft?.inputType ?? 'text') => {
     const res = await fetch('/api/ai/respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, inputType, priorDraft }) });
@@ -134,7 +135,7 @@ export function SeniorExperience() {
       setStep('answer');
       return;
     }
-    await refetchMyRequests();
+    if (result.card) upsertOptimistically(result.card as ServiceRequest);
     setDraft(null);
     setStep('sent');
   };
@@ -166,7 +167,7 @@ export function SeniorExperience() {
     {step === 'request' && draft && <section className="senior-panel"><p className="eyebrow">🤖 AI 요약</p><h1>{typeLabel[draft.type] ?? '요청'}이에요</h1><div className="summary-card"><span className="ai-pill">AI</span><strong>{draft.summary}</strong>{draft.details.destination && <span>목적지: {draft.details.destination}</span>}</div>{draft.missingFields.length > 0 ? <><p>{draft.missingFields[0]}을 알려주시겠어요?</p><div className="text-entry"><input aria-label="추가 정보 입력" value={input} onChange={(event) => setInput(event.target.value)} /><button onClick={async () => { await ask(input, draft); }}>답하기</button></div></> : <SpeechControls text={answer} assistantTurnId={answerTurnId} />}<div className="two-actions"><button className="secondary" onClick={() => { setDraft(null); setStep('home'); }}>취소</button><button className="primary" onClick={confirmRequest} disabled={draft.missingFields.length > 0}>보내주세요</button></div></section>}
     {step === 'sent' && <section className="senior-panel"><h1>담당자에게 보냈어요</h1><p>확인하시면 담당자가 살펴볼 거예요.</p><button className="primary wide" onClick={() => setStep('requests')}>내 요청 보기</button></section>}
     {step === 'answer' && <section className="senior-panel"><div className="chat ai"><span>AI</span>{answer}</div><SpeechControls text={answer} assistantTurnId={answerTurnId} /><button className="primary wide" onClick={() => setStep('home')}>알겠어요</button></section>}
-    {step === 'requests' && <section className="senior-panel"><h1>내 요청 보기</h1><div className="care-card-feed">{myRequests.length === 0 && <p className="notice">아직 보낸 요청이 없어요.</p>}{myRequests.map((item) => <CareRequestCard card={item} role="senior" key={item.id} />)}</div><button className="secondary wide" onClick={() => setStep('home')}>홈으로</button></section>}
+    {step === 'requests' && <section className="senior-panel"><h1>내 요청 보기</h1><div className="care-card-feed">{isLoading && <p className="notice" role="status">요청을 불러오는 중이에요.</p>}{!isLoading && myRequests.length === 0 && <p className="notice">아직 보낸 요청이 없어요.</p>}{myRequests.map((item) => <CareRequestCard card={item} role="senior" key={item.id} />)}</div><button className="secondary wide" onClick={() => setStep('home')}>홈으로</button></section>}
     {step === 'companion' && <section className="senior-panel"><h1>말동무</h1><div className="chat ai"><span>AI</span>오늘 기억나는 좋은 일이 있으세요?</div><SpeechControls text="오늘 기억나는 좋은 일이 있으세요?" /><p className="privacy-note">대화 원문은 가족에게 공유되지 않아요.</p><button className="secondary wide" onClick={() => setStep('home')}>홈으로</button></section>}
     {step === 'emergency' && <section className="emergency-screen"><p>긴급 도움이 필요할 수 있어요</p><h1>지금 119에<br />전화할까요?</h1><div className="emergency-summary">위치: 대전광역시 중구 (데모 위치)<br />발화: {heard || input}<br />시각: 방금 전</div>{!callConfirmed ? <button className="call-button" onClick={() => setCallConfirmed(true)}>119 전화하기</button> : <a href="tel:119" className="call-button">📞 119 전화 걸기 (전화 화면 열림)</a>}<button onClick={() => notify('family')} disabled={notified.family}>{notified.family ? '가족에게 알림 전달됨' : '가족에게 알리기'}</button><button onClick={() => notify('worker')} disabled={notified.worker}>{notified.worker ? '사회복지사에게 알림 전달됨' : '사회복지사에게 알리기'}</button><button className="cancel-link" onClick={() => setStep('home')}>취소</button></section>}
     <button className="fixed-emergency" onClick={openEmergency}>긴급 도움</button>

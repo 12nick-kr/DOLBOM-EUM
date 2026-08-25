@@ -18,6 +18,7 @@ export interface SeniorInputRepository {
   listForSenior(seniorId: string): Promise<SeniorInputEvent[]>;
   attachServiceRequest(eventId: string, requestId: string): Promise<SeniorInputEvent>;
   attachEmergency(eventId: string, emergencyId: string): Promise<SeniorInputEvent>;
+  delete(id: string): Promise<void>;
 }
 
 export class InMemorySeniorInputRepository implements SeniorInputRepository {
@@ -74,6 +75,15 @@ export class InMemorySeniorInputRepository implements SeniorInputRepository {
     if (!row) throw new Error('노인 입력 이벤트를 찾을 수 없습니다.');
     row.emergencyEventId = emergencyId;
     return row;
+  }
+
+  async delete(id: string): Promise<void> {
+    const index = this.rows.findIndex((row) => row.id === id);
+    if (index < 0) return;
+    this.rows.splice(index, 1);
+    for (const [key, eventId] of this.idempotency.entries()) {
+      if (eventId === id) this.idempotency.delete(key);
+    }
   }
 
   reset(): void {

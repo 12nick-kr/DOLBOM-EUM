@@ -64,4 +64,21 @@ describe('FamilyDashboard — emergency acknowledgement leaves an audit trail (P
     fireEvent.click(await screen.findByText('가슴 통증과 호흡 곤란 표현이 감지되었어요'));
     expect(screen.queryByText(/신고\s*완료/)).toBeNull();
   });
+
+  it('refreshes emergency cards immediately when the realtime stream signals a change', async () => {
+    let emergencyReads = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [] }) };
+      if (url === '/api/emergencies') {
+        emergencyReads += 1;
+        return { ok: true, json: async () => ({ data: emergencyReads > 1 ? [emergency] : [] }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FamilyDashboard />);
+    await waitFor(() => expect(emergencyReads).toBeGreaterThan(0));
+    window.dispatchEvent(new CustomEvent('dolbom:emergency-change'));
+    expect(await screen.findByText(emergency.utterance)).toBeVisible();
+  });
 });

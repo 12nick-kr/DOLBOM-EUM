@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { persistedRequestStatusSchema } from '@/lib/domain/types';
 import { demoActor } from '@/lib/server/auth';
-import { serviceRequests } from '@/lib/server/store';
+import { seniorInputs, seniorIdsAssignedTo, serviceRequests } from '@/lib/server/store';
 
 const patchSchema = z.object({
   status: persistedRequestStatusSchema,
@@ -20,6 +20,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { id } = await context.params;
   const existing = await serviceRequests.get(id);
   if (!existing) return NextResponse.json({ error: '요청을 찾을 수 없어요.' }, { status: 404 });
+  if (!seniorIdsAssignedTo(actor.id).includes(existing.seniorId)) return NextResponse.json({ error: '담당 관계가 없는 요청은 변경할 수 없어요.' }, { status: 403 });
   const parsed = patchSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '요청 내용을 확인해 주세요.' }, { status: 400 });
   try {
@@ -27,5 +28,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: '허용되지 않은 상태 변경이에요.' }, { status: 400 });
+  }
+}
+
+/** 담당 관계가 확인된 사회복지사만 카드와 연결된 원본 JSON을 함께 삭제한다. */
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const actor = demoActor(request);
+  if (actor.role !== 'worker') return NextResponse.json({ error: '담당 사회복지사만 요청을 삭제할 수 있어요.' }, { status: 403 });
+  const { id } = await context.params;
+  const existing = await serviceRequests.get(id);
+  if (!existing) return NextResponse.json({ error: '요청을 찾을 수 없어요.' }, { status: 404 });
+  if (!seniorIdsAssignedTo(actor.id).includes(existing.seniorId)) {
+    return NextResponse.json({ error: '담당 관계가 없는 요청은 삭제할 수 없어요.' }, { status: 403 });
+  }
+  try {
+    const deleted = await serviceRequests.delete(id, actor.id);
+    if (deleted.sourceEventId) await seniorInputs.delete(deleted.sourceEventId);
+    return NextResponse.json({ deleted: true, id });
+  } catch {
+    return NextResponse.json({ error: '요청을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.' }, { status: 500 });
   }
 }

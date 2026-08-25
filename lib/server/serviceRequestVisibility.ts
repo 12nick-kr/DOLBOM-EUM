@@ -16,3 +16,14 @@ export async function getVisibleRequests(actor: { role: Role; id: string }): Pro
   // 가족 화면에는 별도 동의(transcriptConsent) 없이는 원문을 노출하지 않는다.
   return scoped.map((row) => redactForRole(row, actor.role, { transcriptConsent: false }));
 }
+
+export async function getVisibleRequest(actor: { role: Role; id: string }, id: string): Promise<(ServiceRequest & { transcript?: string }) | undefined> {
+  const row = await serviceRequests.get(id);
+  if (!row) return undefined;
+  const canSee = actor.role === 'senior'
+    ? row.seniorId === actor.id
+    : actor.role === 'worker'
+      ? seniorIdsAssignedTo(actor.id).includes(row.seniorId)
+      : row.seniorId === demoSeniorId;
+  return canSee ? redactForRole(row, actor.role, { transcriptConsent: false }) : undefined;
+}

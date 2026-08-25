@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { CareRequestCard } from '@/components/CareRequestCard';
 
 const card = {
@@ -22,5 +22,17 @@ describe('CareRequestCard shared role rendering', () => {
   it('uses senior-friendly status language for the senior role', () => {
     render(<CareRequestCard card={card} role="senior" />);
     expect(screen.getByText('담당자에게 보냈어요')).toBeVisible();
+  });
+
+  it('renders a worker-only delete control in the card heading', () => {
+    const onDelete = vi.fn();
+    const { rerender } = render(<CareRequestCard card={card} role="worker" onDelete={onDelete} />);
+    const button = screen.getByRole('button', { name: '요청 삭제' });
+    expect(button.closest('.care-card-heading')).not.toBeNull();
+    fireEvent.click(button);
+    expect(onDelete).toHaveBeenCalledWith(card.id);
+
+    rerender(<CareRequestCard card={card} role="family" onDelete={onDelete} />);
+    expect(screen.queryByRole('button', { name: '요청 삭제' })).toBeNull();
   });
 });

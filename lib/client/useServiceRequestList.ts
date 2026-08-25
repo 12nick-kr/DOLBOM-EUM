@@ -17,6 +17,10 @@ export type UseServiceRequestListResult = {
   isUnread: (id: string) => boolean;
   acknowledge: (id: string) => void;
   refetch: () => Promise<void>;
+  isLoading: boolean;
+  removeOptimistically: (id: string) => ServiceRequest | undefined;
+  restore: (request: ServiceRequest) => void;
+  upsertOptimistically: (request: ServiceRequest) => void;
 };
 
 /**
@@ -28,14 +32,16 @@ export function useServiceRequestList({ realtime, fetchList }: UseServiceRequest
   if (!storeRef.current) storeRef.current = new RequestListStore();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('connected');
+  const [isLoading, setIsLoading] = useState(true);
   const [, forceRender] = useState(0);
 
   const sync = () => { setRequests(storeRef.current.list()); forceRender((n) => n + 1); };
 
   const refetch = async () => {
+    const requestedAt = new Date().toISOString();
     try {
       const fresh = await fetchList();
-      storeRef.current.hydrate(fresh);
+      storeRef.current.replaceSnapshot(fresh, requestedAt);
       sync();
     } catch {
       // 네트워크/서버 장애가 있어도 화면은 마지막으로 받은 목록을 유지한다(FR-08, §7.1 긴급 버튼은
@@ -46,20 +52,22 @@ export function useServiceRequestList({ realtime, fetchList }: UseServiceRequest
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const requestedAt = new Date().toISOString();
       try {
         const fresh = await fetchList();
         if (cancelled) return;
-        storeRef.current.hydrate(fresh);
+        storeRef.current.replaceSnapshot(fresh, requestedAt);
         sync();
       } catch {
         // 초기 조회가 실패해도 컴포넌트는 정상 렌더링을 계속한다 — 빈 목록으로 시작할 뿐이다.
-      }
+      } finally { if (!cancelled) setIsLoading(false); }
     })();
 
     if (!realtime) return () => { cancelled = true; };
 
     const unsubscribeEvents = realtime.subscribe((event) => {
-      storeRef.current.upsert(event.request);
+      if (event.type === 'delete') storeRef.current.remove(event.id, event.deletedAt);
+      else storeRef.current.upsert(event.request);
       sync();
     });
     const unsubscribeConnection = realtime.onConnectionChange((state) => {
@@ -67,7 +75,8 @@ export function useServiceRequestList({ realtime, fetchList }: UseServiceRequest
       setConnectionState(state);
       if (state === 'connected') {
         // 재연결 시 누락 구간을 서버 재조회로 메운다.
-        fetchList().then((fresh) => { if (!cancelled) { storeRef.current.hydrate(fresh); sync(); } }).catch(() => {});
+        const requestedAt = new Date().toISOString();
+        fetchList().then((fresh) => { if (!cancelled) { storeRef.current.replaceSnapshot(fresh, requestedAt); sync(); } }).catch(() => {});
       }
     });
 
@@ -82,5 +91,9 @@ export function useServiceRequestList({ realtime, fetchList }: UseServiceRequest
     isUnread: (id: string) => storeRef.current.isUnread(id),
     acknowledge: (id: string) => { storeRef.current.acknowledge(id); sync(); },
     refetch,
+    isLoading,
+    removeOptimistically: (id: string) => { const removed = storeRef.current.remove(id); sync(); return removed; },
+    restore: (request: ServiceRequest) => { storeRef.current.restore(request); sync(); },
+    upsertOptimistically: (request: ServiceRequest) => { storeRef.current.upsert(request); sync(); },
   };
 }

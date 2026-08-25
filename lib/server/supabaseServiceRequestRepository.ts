@@ -70,11 +70,11 @@ export function mapCreateInputToRow(input: CreateServiceRequestInput): Record<st
  * 이 저장소는 그 어댑터에 필요한 원본 이벤트를 실제 DB 조작 시점에 로컬로도 발행할 뿐이다.
  */
 export class SupabaseServiceRequestRepository implements ServiceRequestRepository {
-  private listeners = new Set<(event: { type: 'insert' | 'update'; request: ServiceRequest }) => void>();
+  private listeners = new Set<(event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) => void>();
 
   constructor(private client: SupabaseClient) {}
 
-  private emit(event: { type: 'insert' | 'update'; request: ServiceRequest }) {
+  private emit(event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) {
     for (const listener of this.listeners) listener(event);
   }
 
@@ -166,7 +166,19 @@ export class SupabaseServiceRequestRepository implements ServiceRequestRepositor
     return updated;
   }
 
-  onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest }) => void): () => void {
+  async delete(id: string, actorId: string): Promise<ServiceRequest> {
+    const { data, error } = await this.client.rpc('delete_service_request_with_source', {
+      p_request_id: id,
+      p_actor_id: actorId,
+    });
+    if (error || !data) throw new Error(`service_requests 삭제 실패: ${error?.message ?? '요청을 찾을 수 없습니다.'}`);
+    const deleted = mapRowToServiceRequest(data as ServiceRequestRow);
+    const deletedAt = new Date().toISOString();
+    this.emit({ type: 'delete', id, seniorId: deleted.seniorId, deletedAt });
+    return deleted;
+  }
+
+  onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }

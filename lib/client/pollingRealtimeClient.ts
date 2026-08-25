@@ -14,15 +14,24 @@ export class PollingRealtimeClient implements RealtimeClientPort {
   private state: RealtimeConnectionState = 'connected';
   private known = new Map<string, string>(); // id -> updatedAt
   private timer: ReturnType<typeof setInterval> | null = null;
+  private immediateTimer: ReturnType<typeof setTimeout> | null = null;
+  private active = true;
 
-  constructor(private fetchList: () => Promise<ServiceRequest[]>, private intervalMs = 3000) {
-    this.timer = setInterval(() => { this.tick(); }, this.intervalMs);
+  constructor(private fetchList: () => Promise<ServiceRequest[]>, private intervalMs = 1000) {
+    this.start();
+  }
+
+  private start() {
+    if (!this.active || this.timer) return;
+    this.immediateTimer = setTimeout(() => { void this.tick(); }, 0);
+    this.timer = setInterval(() => { void this.tick(); }, this.intervalMs);
   }
 
   private async tick() {
     try {
       const rows = await this.fetchList();
       if (this.state === 'disconnected') this.setConnectionState('connected');
+      const seen = new Set(rows.map((row) => row.id));
       for (const row of rows) {
         const knownUpdatedAt = this.known.get(row.id);
         if (!knownUpdatedAt) {
@@ -32,6 +41,11 @@ export class PollingRealtimeClient implements RealtimeClientPort {
           this.known.set(row.id, row.updatedAt);
           this.emit({ type: 'update', request: row });
         }
+      }
+      for (const id of [...this.known.keys()]) {
+        if (seen.has(id)) continue;
+        this.known.delete(id);
+        this.emit({ type: 'delete', id, deletedAt: new Date().toISOString() });
       }
     } catch {
       this.setConnectionState('disconnected');
@@ -62,7 +76,23 @@ export class PollingRealtimeClient implements RealtimeClientPort {
     return this.state;
   }
 
+  setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    if (!active) {
+      if (this.timer) clearInterval(this.timer);
+      if (this.immediateTimer) clearTimeout(this.immediateTimer);
+      this.timer = null;
+      this.immediateTimer = null;
+      return;
+    }
+    this.start();
+  }
+
   dispose(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.immediateTimer) clearTimeout(this.immediateTimer);
+    this.timer = null;
+    this.immediateTimer = null;
   }
 }

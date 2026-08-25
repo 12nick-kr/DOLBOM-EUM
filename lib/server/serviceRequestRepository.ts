@@ -30,13 +30,14 @@ export interface ServiceRequestRepository {
   transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): Promise<ServiceRequest>;
   acknowledge(id: string, workerId: string): Promise<ServiceRequest>;
   cancel(id: string, actor: Role): Promise<ServiceRequest>;
-  onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest }) => void): () => void;
+  delete(id: string, actorId: string): Promise<ServiceRequest>;
+  onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) => void): () => void;
 }
 
 export class InMemoryServiceRequestRepository implements ServiceRequestRepository {
   private rows: ServiceRequest[] = [];
   private idempotency = new Map<string, string>();
-  private listeners = new Set<(event: { type: 'insert' | 'update'; request: ServiceRequest }) => void>();
+  private listeners = new Set<(event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) => void>();
   private seq = 0;
 
   constructor(seed: ServiceRequest[] = []) {
@@ -48,7 +49,7 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     return `request-${this.seq}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  private emit(event: { type: 'insert' | 'update'; request: ServiceRequest }) {
+  private emit(event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) {
     for (const listener of this.listeners) listener(event);
   }
 
@@ -130,7 +131,18 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     return row;
   }
 
-  onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest }) => void): () => void {
+  async delete(id: string, _actorId: string): Promise<ServiceRequest> {
+    const index = this.rows.findIndex((item) => item.id === id);
+    if (index < 0) throw new Error('요청을 찾을 수 없습니다.');
+    const [deleted] = this.rows.splice(index, 1);
+    for (const [key, requestId] of this.idempotency.entries()) {
+      if (requestId === id) this.idempotency.delete(key);
+    }
+    this.emit({ type: 'delete', id, seniorId: deleted.seniorId, deletedAt: new Date().toISOString() });
+    return deleted;
+  }
+
+  onChange(listener: (event: { type: 'insert' | 'update'; request: ServiceRequest } | { type: 'delete'; id: string; seniorId: string; deletedAt: string }) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }

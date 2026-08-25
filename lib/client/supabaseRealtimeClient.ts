@@ -36,7 +36,8 @@ export class SupabaseRealtimeClient implements RealtimeClientPort {
         if (!changed.id) return;
         void this.fetchList().then((rows) => {
           const request = rows.find((row) => row.id === changed.id);
-          if (request) this.emit({ type: payload.eventType === 'INSERT' ? 'insert' : 'update', request });
+          if (payload.eventType === 'DELETE') this.emit({ type: 'delete', id: changed.id!, deletedAt: new Date().toISOString() });
+          else if (request) this.emit({ type: payload.eventType === 'INSERT' ? 'insert' : 'update', request });
         }).catch(() => this.setState('disconnected'));
       })
       .subscribe((status) => this.setState(status === 'SUBSCRIBED' ? 'connected' : 'disconnected'));

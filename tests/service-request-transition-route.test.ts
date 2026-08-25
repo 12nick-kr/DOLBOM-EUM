@@ -11,6 +11,12 @@ function patchRequest(id: string, role: string, body: unknown) {
   return request;
 }
 
+function deleteRequest(id: string, role: string) {
+  const request = new NextRequest(`http://localhost:3000/api/service-requests/${id}`, { method: 'DELETE' });
+  request.cookies.set('demo-role', role);
+  return request;
+}
+
 /**
  * PRD §7.4 "상태 변경은 반드시 서버에서 권한을 재검증한다. UI에서 버튼을 숨긴 것만으로 권한
  * 통제를 대신하지 않는다." — PATCH가 클라이언트가 보낸 임의의 assigneeId를 그대로 신뢰하면
@@ -44,5 +50,22 @@ describe('PATCH /api/service-requests/:id derives assignee from the authenticate
     expect(res.status).toBe(200);
     const updated = await res.json();
     expect(updated.assigneeId).not.toBe('attacker-claimed-id');
+  });
+});
+
+describe('DELETE /api/service-requests/:id hard-deletes a worker-visible request', () => {
+  it('rejects non-worker deletion and removes the row for an assigned worker', async () => {
+    const { GET } = await import('@/app/api/service-requests/route');
+    const listRes = await GET(patchRequest('', 'worker', {}));
+    const list = (await listRes.json()).data as { id: string }[];
+    const target = list[0];
+    const route = await import('@/app/api/service-requests/[id]/route');
+
+    const denied = await route.DELETE(deleteRequest(target.id, 'family'), { params: Promise.resolve({ id: target.id }) });
+    expect(denied.status).toBe(403);
+
+    const deleted = await route.DELETE(deleteRequest(target.id, 'worker'), { params: Promise.resolve({ id: target.id }) });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toMatchObject({ deleted: true, id: target.id });
   });
 });
