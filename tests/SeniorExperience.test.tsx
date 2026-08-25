@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SeniorExperience } from '@/components/SeniorExperience';
 
@@ -33,7 +33,7 @@ function stubFetch(handlers: { respond?: unknown[]; myRequests?: unknown[]; tran
 }
 
 describe('senior accessible entry', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
   it('renders a large one-tap speaking action, text alternative and fixed emergency action', () => {
     stubFetch();
@@ -61,14 +61,14 @@ describe('senior accessible entry', () => {
     render(<SeniorExperience />);
     fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
     expect(screen.getByRole('heading')).toHaveTextContent('지금 119에전화할까요?');
-    expect(screen.getByRole('button', { name: /^119 전화하기/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^119 알리기/ })).toBeVisible();
   });
 
   it('requires one explicit confirmation before the tel: link becomes active — the call button is not itself a live tel: link', () => {
     stubFetch();
     render(<SeniorExperience />);
     fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
-    const callButton = screen.getByRole('button', { name: /^119 전화하기/ });
+    const callButton = screen.getByRole('button', { name: /^119 알리기/ });
     // Before confirming, there must be no live tel: link on the page (accidental dialing must be impossible).
     expect(screen.queryByRole('link', { name: /119/ })).toBeNull();
     fireEvent.click(callButton);
@@ -81,7 +81,7 @@ describe('senior accessible entry', () => {
     render(<SeniorExperience />);
     fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
     expect(screen.queryByText(/신고\s*완료/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /^119 전화하기/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^119 알리기/ }));
     expect(screen.queryByText(/신고\s*완료/)).toBeNull();
   });
 
@@ -89,51 +89,85 @@ describe('senior accessible entry', () => {
     const fetchMock = stubFetch();
     render(<SeniorExperience />);
     fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
-    fireEvent.click(screen.getByRole('button', { name: '가족에게 알리기' }));
+    fireEvent.click(screen.getByRole('button', { name: '가족·복지사에게 알리기' }));
     await Promise.resolve();
     const emergencyCall = fetchMock.mock.calls.find((call) => call[0] === '/api/emergencies');
     expect(emergencyCall).toBeDefined();
   });
 
-  it('analyzes text immediately after send without an intermediate input-confirmation screen', async () => {
+  it('creates exactly one emergency record even though the single button click notifies family and worker together', async () => {
+    // /api/emergencies POST가 즉시 응답하지 않는 상황(느린 네트워크)을 흉내 내, notify('family')와
+    // notify('worker')가 같은 클릭에서 activeEmergencyId가 아직 커밋되지 않은 채 동시에 실행되어도
+    // 긴급 이벤트 생성 요청이 한 번만 나가는지 검증한다.
+    let resolvePost!: (value: { ok: boolean; json: () => Promise<{ id: string; status: string }> }) => void;
+    const postPromise = new Promise<{ ok: boolean; json: () => Promise<{ id: string; status: string }> }>((resolve) => { resolvePost = resolve; });
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/care-cards' && (!init || init.method === undefined)) return { json: async () => ({ data: [], is_demo: true }) };
+      if (url === '/api/session') return { ok: true, json: async () => ({ data: { id: 'senior-1', role: 'senior', displayName: '김순자' } }) };
+      if (url === '/api/emergencies' && init?.method === 'POST') return postPromise;
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SeniorExperience />);
+    fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
+    fireEvent.click(screen.getByRole('button', { name: '가족·복지사에게 알리기' }));
+    await act(async () => { resolvePost({ ok: true, json: async () => ({ id: 'emergency-new-1', status: 'detected' }) }); });
+    await waitFor(() => expect(screen.getByRole('button', { name: '가족·복지사에게 알림 전달됨' })).toBeVisible());
+    const emergencyPosts = fetchMock.mock.calls.filter((call) => call[0] === '/api/emergencies' && call[1]?.method === 'POST');
+    expect(emergencyPosts.length).toBe(1);
+  });
+
+  it('analyzes text immediately after send without an intermediate input-confirmation screen, then auto-submits once info is complete', async () => {
     const fetchMock = stubFetch({ respond: [{ assistant_text: '요청 내용을 정리했어요. 맞는지 확인해 주세요.', intent: 'service_request', urgency: 'welfare', draft: { seniorId: 'senior-demo-001', type: 'daily_help', summary: '장보기 도움이 필요해요.', transcript: '장보기를 도와주세요.', inputType: 'text', details: {}, missingFields: [] } }] });
     render(<SeniorExperience />);
     fireEvent.change(screen.getByLabelText('도움 요청 입력'), { target: { value: '장보기를 도와주세요.' } });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-    expect(await screen.findByText('일상 도움 요청이에요')).toBeVisible();
     expect(screen.queryByRole('heading', { name: '입력한 내용이 맞나요?' })).toBeNull();
-    expect(screen.getByText('장보기를 도와주세요.')).toBeVisible();
-    const analysisCall = fetchMock.mock.calls.find((call) => call[0] === '/api/ai/respond');
+    const analysisCall = await vi.waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => c[0] === '/api/ai/respond');
+      if (!call) throw new Error('respond not called yet');
+      return call;
+    });
     expect(JSON.parse(String(analysisCall?.[1]?.body)).purpose).toBe('service_request');
+    // missingFields가 비어 있으므로 확인 화면에서 멈추지 않고 자동으로 senior-inputs에 전송된다.
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/senior-inputs' && call[1]?.method === 'POST')).toBe(true));
+    expect(await screen.findByText('담당자에게 보냈어요')).toBeVisible();
   });
 
-  it('shows the AI-generated draft summary with an AI badge and only registers the card after explicit confirmation', async () => {
+  it('auto-submits a complete draft with a confirmed idempotency-keyed payload, without waiting for a manual tap', async () => {
     const draft = { seniorId: 'senior-demo-001', type: 'hospital_escort', summary: '충남대학교병원 병원 동행 도움을 요청했어요.', transcript: '다음 주 화요일 충남대병원 갈 때 같이 갈 사람이 필요해요.', inputType: 'text', details: { destination: '충남대학교병원' }, missingFields: [] };
     const fetchMock = stubFetch({ respond: [{ assistant_text: '요청 내용을 정리했어요. 맞는지 확인해 주세요.', intent: 'service_request', urgency: 'welfare', draft }] });
     render(<SeniorExperience />);
     fireEvent.change(screen.getByLabelText('도움 요청 입력'), { target: { value: draft.transcript } });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-    expect(await screen.findByText('병원 동행 요청이에요')).toBeVisible();
-    expect(screen.getByText('텍스트 입력 원문')).toBeVisible();
-    expect(screen.getByText(draft.transcript)).toBeVisible();
-    expect(screen.getByText('AI 요약')).toBeVisible();
-    expect(screen.getByText(draft.summary)).toBeVisible();
-    expect(fetchMock.mock.calls.some((call) => call[0] === '/api/senior-inputs')).toBe(false);
-    // Confirming must call the service-requests endpoint with a confirmed:true idempotency-keyed payload.
-    fireEvent.click(screen.getByRole('button', { name: '보내주세요' }));
-    await screen.findByText('내 요청 보기');
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/senior-inputs' && call[1]?.method === 'POST')).toBe(true));
+    expect(await screen.findByText('담당자에게 보냈어요')).toBeVisible();
     const confirmCall = fetchMock.mock.calls.find((call) => call[0] === '/api/senior-inputs' && call[1]?.method === 'POST');
     expect(confirmCall).toBeDefined();
     const body = JSON.parse(String(confirmCall![1]!.body));
     expect(body.confirmed).toBe(true);
     expect(typeof body.idempotencyKey).toBe('string');
     expect(body.idempotencyKey.length).toBeGreaterThan(0);
+    expect(body.request.summary).toBe(draft.summary);
+  });
+
+  it('auto-returns from the sent screen to home 10 seconds after the request is sent', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const draft = { seniorId: 'senior-demo-001', type: 'daily_help', summary: '장보기 도움이 필요해요.', transcript: '장보기를 도와주세요.', inputType: 'text', details: {}, missingFields: [] };
+    stubFetch({ respond: [{ assistant_text: '요청 내용을 정리했어요. 맞는지 확인해 주세요.', intent: 'service_request', urgency: 'welfare', draft }] });
+    render(<SeniorExperience />);
+    fireEvent.change(screen.getByLabelText('도움 요청 입력'), { target: { value: draft.transcript } });
+    fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+    await vi.waitFor(() => expect(screen.getByText('담당자에게 보냈어요')).toBeVisible());
+    expect(screen.getByText('10초 뒤 홈으로 돌아가요.')).toBeVisible();
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByRole('button', { name: '말하기 시작' })).toBeVisible();
   });
 
   it('transcribes and analyzes voice through the same request-card flow without a review screen', async () => {
     const transcript = '내일 병원에 같이 가 주세요.';
     const draft = { seniorId: 'senior-demo-001', type: 'hospital_escort', summary: '내일 병원 동행을 요청했어요.', transcript, inputType: 'voice', details: { desiredAt: '내일' }, missingFields: [] };
-    stubFetch({ transcript, respond: [{ assistant_text: '요청 내용을 정리했어요. 맞는지 확인해 주세요.', intent: 'service_request', urgency: 'welfare', draft }] });
+    const fetchMock = stubFetch({ transcript, respond: [{ assistant_text: '요청 내용을 정리했어요. 맞는지 확인해 주세요.', intent: 'service_request', urgency: 'welfare', draft }] });
 
     const trackStop = vi.fn();
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: trackStop }] })) } });
@@ -149,13 +183,17 @@ describe('senior accessible entry', () => {
     }
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
 
+    // jsdom에는 speechSynthesis·AudioContext가 없어 voiceEngine의 speak/beep이 즉시 resolve된다
+    // (실제 기기의 TTS 미지원 상황과 동일한 경로) — runVoiceTurn이 마이크로태스크 몇 번 만에
+    // startRecording까지 자동으로 도달하므로, act로 감싸 그 큐를 흘려보낸다.
     render(<SeniorExperience />);
-    fireEvent.click(screen.getByRole('button', { name: '말하기 시작' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '말하기 시작' })); });
     fireEvent.click(await screen.findByRole('button', { name: '지금 녹음 마치기' }));
-    expect(await screen.findByText('병원 동행 요청이에요')).toBeVisible();
-    expect(screen.queryByRole('heading', { name: '입력한 내용이 맞나요?' })).toBeNull();
-    expect(screen.getByText('음성 인식 원문')).toBeVisible();
-    expect(screen.getByText(draft.summary)).toBeVisible();
+    // 정보(목적지 포함)가 다 갖춰진 draft이므로 확인 화면에 머물지 않고 바로 자동 전송된다.
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/senior-inputs' && call[1]?.method === 'POST')).toBe(true));
+    expect(await screen.findByText('담당자에게 보냈어요')).toBeVisible();
+    const confirmCall = fetchMock.mock.calls.find((call) => call[0] === '/api/senior-inputs' && call[1]?.method === 'POST');
+    expect(JSON.parse(String(confirmCall![1]!.body)).request.summary).toBe(draft.summary);
     expect(trackStop).toHaveBeenCalled();
   });
 
@@ -176,13 +214,14 @@ describe('senior accessible entry', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<SeniorExperience />);
+    fireEvent.change(screen.getByLabelText('도움 요청 입력'), { target: { value: '다음 주 병원 갈 때 같이 갈 사람이 필요해요.' } });
     const send = screen.getByRole('button', { name: '보내기' });
     fireEvent.click(send);
     fireEvent.click(send);
-    expect(screen.getByText('AI가 신청 내용을 정리하고 있어요.', { selector: '[role="status"]' })).toBeVisible();
+    expect(screen.getByText('정리하고 있어요.', { selector: '[role="status"]' })).toBeVisible();
     expect(fetchMock.mock.calls.filter((call) => call[0] === '/api/ai/respond')).toHaveLength(1);
     resolveResponse?.({ ok: true, json: async () => ({ assistant_text: '정리했어요.', intent: 'service_request', urgency: 'welfare', draft: { seniorId: 'senior-demo-001', type: 'daily_help', summary: '일상 도움 요청', transcript: '다음 주 병원 갈 때 같이 갈 사람이 필요해요.', inputType: 'text', details: {}, missingFields: [] } }) });
-    await waitFor(() => expect(screen.getByText('일상 도움 요청이에요')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('담당자에게 보냈어요')).toBeVisible());
   });
 
   it('keeps the emergency screen open when an older AI response arrives late', async () => {
@@ -215,10 +254,9 @@ describe('senior accessible entry', () => {
     const fetchMock = stubFetch();
     render(<SeniorExperience />);
     fireEvent.click(screen.getByRole('button', { name: '긴급 도움' }));
-    fireEvent.click(screen.getByRole('button', { name: '가족에게 알리기' }));
+    fireEvent.click(screen.getByRole('button', { name: '가족·복지사에게 알리기' }));
     await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/emergencies')).toBe(true));
-    fireEvent.click(screen.getByRole('button', { name: '긴급 상황 종료' }));
-    fireEvent.click(screen.getByRole('button', { name: '긴급 상황 종료' }));
+    fireEvent.click(screen.getByRole('button', { name: '홈으로' }));
     await screen.findByRole('button', { name: '말하기 시작' });
     const closeCall = fetchMock.mock.calls.find((call) => String(call[0]).startsWith('/api/emergencies/') && call[1]?.method === 'PATCH');
     expect(JSON.parse(String(closeCall?.[1]?.body))).toMatchObject({ status: 'closed', closeReason: 'senior_cancelled' });

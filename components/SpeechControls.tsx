@@ -119,5 +119,5 @@ export function SpeechControls({ text, assistantTurnId, speechToken, compact = f
 
   useEffect(() => () => { window.speechSynthesis?.cancel(); audioRef.current?.pause(); releaseAudioUrl(); }, []);
 
-  return <div className={`speech-controls ${compact ? 'compact' : ''}`}><span className="ai-pill">🤖 AI 생성 음성 · {status === 'playing' ? '🔊 재생 중' : status === 'loading' ? '준비 중' : status === 'paused' ? '일시정지됨' : '텍스트 먼저 제공'}</span><div><button type="button" onClick={play}>다시 듣기</button><button type="button" onClick={pause}>{status === 'paused' ? '계속' : '일시정지'}</button><button type="button" onClick={stop}>그만 듣기</button></div><button type="button" className="text-button" onClick={() => { setEnabled(!enabled); stop(); }}>{enabled ? '음성 답변 끄기' : '음성 답변 켜기'}</button></div>;
+  return <div className={`speech-controls ${compact ? 'compact' : ''}`}><span className="ai-pill">AI 음성 안내 · {status === 'playing' ? '재생 중' : status === 'loading' ? '준비 중' : status === 'paused' ? '일시정지됨' : '텍스트 먼저 제공'}</span><div><button type="button" onClick={play}>다시 듣기</button><button type="button" onClick={pause}>{status === 'paused' ? '계속' : '일시정지'}</button><button type="button" onClick={stop}>그만 듣기</button></div><button type="button" className="text-button" onClick={() => { setEnabled(!enabled); stop(); }}>{enabled ? '음성 답변 끄기' : '음성 답변 켜기'}</button></div>;
 }

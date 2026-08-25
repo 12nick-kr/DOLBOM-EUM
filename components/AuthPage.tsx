@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { formatLoginId } from '@/lib/auth/credentials';
 import type { Role } from '@/lib/domain/types';
+import { BrandLogo } from './BrandLogo';
 
 const roleCopy: Record<Role, { label: string; description: string }> = {
   senior: { label: '노인', description: '요청 카드와 긴급 도움을 사용해요.' },
@@ -42,9 +43,8 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
 
   return <main className="auth-shell">
     <section className="auth-card" aria-labelledby="auth-title">
-      <span className="demo-badge">가상 계정 데모</span>
-      <p className="eyebrow">DOLBOM EUM AI</p>
-      <h1 id="auth-title">{mode === 'signup' ? '계정 만들기' : '돌봄이음 로그인'}</h1>
+      <BrandLogo className="auth-logo" />
+      <h1 id="auth-title">{mode === 'signup' ? '계정 만들기' : '로그인'}</h1>
       <p className="auth-description"><strong>010-0000-0001~9999</strong> 형태의 로그인 아이디를 사용해 주세요. 실제 전화번호나 SMS 인증이 아니에요.</p>
       <form className="auth-form" onSubmit={submit}>
         {mode === 'signup' && <fieldset className="role-selector">
