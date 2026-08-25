@@ -45,14 +45,14 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
       <span className="demo-badge">가상 계정 데모</span>
       <p className="eyebrow">DOLBOM EUM AI</p>
       <h1 id="auth-title">{mode === 'signup' ? '계정 만들기' : '돌봄이음 로그인'}</h1>
-      <p className="auth-description">실제 전화번호가 아닌 <strong>010-0000-0001</strong> 형태의 가상 번호를 사용해 주세요.</p>
+      <p className="auth-description">실제 전화번호가 아닌 <strong>010-0000-0001~9999</strong> 사이의 가상 번호를 사용해 주세요.</p>
       <form className="auth-form" onSubmit={submit}>
         {mode === 'signup' && <fieldset className="role-selector">
           <legend>계정 역할</legend>
           <div>{(Object.keys(roleCopy) as Role[]).map((item) => <button type="button" key={item} aria-pressed={role === item} className={role === item ? 'selected' : ''} onClick={() => setRole(item)}><strong>{roleCopy[item].label}</strong><span>{roleCopy[item].description}</span></button>)}</div>
         </fieldset>}
         {mode === 'signup' && <label><span>이름</span><input autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={30} required placeholder="김순자" /></label>}
-        <label><span>가상 전화번호</span><input inputMode="numeric" autoComplete="username" value={phone} onChange={(event) => setPhone(formatVirtualPhone(event.target.value))} maxLength={13} required placeholder="010-0000-0001" /></label>
+        <label><span>가상 전화번호</span><input inputMode="numeric" autoComplete="username" value={phone} onChange={(event) => setPhone(formatVirtualPhone(event.target.value))} maxLength={13} required placeholder={mode === 'signup' ? '예: 010-0000-1234' : '010-0000-0001'} /></label>
         <label><span>로그인 비밀번호 숫자 6자리</span><input type="password" inputMode="numeric" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} minLength={6} maxLength={6} required placeholder="••••••" /></label>
         {mode === 'signup' && <label><span>비밀번호 확인</span><input type="password" inputMode="numeric" autoComplete="new-password" value={pinConfirm} onChange={(event) => setPinConfirm(event.target.value.replace(/\D/g, '').slice(0, 6))} minLength={6} maxLength={6} required placeholder="••••••" /></label>}
         {error && <p className="notice error-notice" role="alert">{error}</p>}

@@ -48,7 +48,9 @@ export async function POST(request: NextRequest) {
     response.cookies.set(demoSessionCookie, token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 12 });
     return response;
   } catch (error) {
-    const message = error instanceof Error && error.message.includes('이미 사용') ? error.message : '이미 사용 중이거나 만들 수 없는 가상 전화번호예요.';
+    // Supabase Auth의 중복 전화번호 에러는 영문(예: "already been registered")으로 오므로
+    // 원문을 그대로 노출하지 않되, 실제로 가장 흔한 원인이 "이미 등록됨"이라는 걸 문구에 반영한다.
+    const message = error instanceof Error && error.message.includes('이미 사용') ? error.message : '이미 가입된 가상 전화번호예요. 다른 번호를 사용해 주세요.';
     return NextResponse.json({ error: message }, { status: 409 });
   }
 }
