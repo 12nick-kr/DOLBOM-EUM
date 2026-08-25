@@ -45,13 +45,28 @@ async function main() {
   }
 
   try {
-    // 최소 크기의 유효한 WAV 헤더만 보내 API 연결과 스코프만 확인한다(전사 정확도는 검증하지 않음).
-    const silentWav = new Uint8Array([
-      0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
-      0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x80, 0x3e, 0x00, 0x00, 0x00, 0x7d, 0x00, 0x00,
-      0x02, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61, 0x00, 0x00, 0x00, 0x00,
-    ]);
-    const r = await ai.transcribe(silentWav.buffer as ArrayBuffer, 'audio/wav');
+    // 0.5초 분량의 실제 무음 PCM 데이터가 있는 WAV를 보낸다. data 청크 길이가 0이면 OpenAI가
+    // "Audio file might be corrupted or unsupported"(400)로 거부하므로, API 연결·스코프 확인에는
+    // 최소한 유효한 payload 길이가 필요하다(전사 정확도 자체는 검증하지 않는다).
+    const sampleRate = 16000;
+    const numSamples = Math.floor(sampleRate * 0.5);
+    const dataSize = numSamples * 2;
+    const wav = Buffer.alloc(44 + dataSize);
+    wav.write('RIFF', 0);
+    wav.writeUInt32LE(36 + dataSize, 4);
+    wav.write('WAVE', 8);
+    wav.write('fmt ', 12);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(sampleRate, 24);
+    wav.writeUInt32LE(sampleRate * 2, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36);
+    wav.writeUInt32LE(dataSize, 40);
+    // 나머지 바이트는 Buffer.alloc이 0으로 채운 무음 샘플 그대로 둔다.
+    const r = await ai.transcribe(wav.buffer.slice(wav.byteOffset, wav.byteOffset + wav.byteLength) as ArrayBuffer, 'audio/wav');
     results.transcription = typeof r.transcript === 'string' ? 'pass' : 'fail';
   } catch {
     results.transcription = 'fail';

@@ -71,7 +71,8 @@ export function createOpenAiPort(env: Record<string, string | undefined> = proce
         throw new Error(`transcription_failed:${res.status}`);
       }
       const data = (await res.json()) as { text?: string };
-      if (!data.text) throw new Error('transcription_empty');
+      // 무음/짧은 오디오는 실제로 text: ""(빈 문자열)를 정상 반환한다 — falsy 체크로 오분류하지 않는다.
+      if (typeof data.text !== 'string') throw new Error('transcription_malformed');
       return { transcript: data.text, isDemo: false };
     },
 

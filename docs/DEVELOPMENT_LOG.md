@@ -253,3 +253,21 @@
 - 의사결정: `FamilyDashboard`의 "위기 알림" 섹션(상단 배너, 위기 상세 화면)은 여전히 고정 데모 문구를 쓴다 — 이번 사용자 지시는 명시적으로 "노인 요청 사항을 카드 형태로 저장/조회"하는 파이프라인(우선순위 1~3)에 관한 것이었고, `emergency_events`를 가족 화면이 실제 조회하도록 만드는 것은 별도 범위(TDD Phase 5는 이미 완료됐으나 그 완료 기준은 "PATCH로 감사 로그를 남기는 것"이었지 "가족 화면이 GET으로 실제 목록을 읽는 것"은 아니었다)로 문서화해 두고 이번 단위에서는 손대지 않았다.
 - 알려진 제한/다음 단계: `FamilyDashboard`의 위기 알림 배너/상세는 여전히 고정 데모 문구(`emergency_events`를 실제로 GET하지 않음) — 다음 단위 후보. 세 역할 화면이 "하나의 요청 카드 컴포넌트"를 공유하도록 리팩터하는 TDD §3.8 완료 조건은 아직 충족되지 않았다(`WorkerDashboard`/`SeniorExperience`/`FamilyDashboard`가 각자 카드 렌더링 JSX를 따로 가지고 있음) — 기능적으로는 세 화면 모두 실 데이터를 쓰지만 구조적 중복 제거는 별도 리팩터 과제로 남는다.
 - 예정 커밋 메시지: `feat: FamilyDashboard를 실제 요청 카드 API에 연결`
+
+## 2026-08-25 — OpenAI 재smoke test: 계정 모델 권한 해금 확인 + 실전사 빈 문자열 오분류 버그 수정
+
+- 목표: 소유자가 OpenAI 프로젝트의 모델 허용 목록을 갱신했다고 알려와, PRD §14.2 smoke test(`npx tsx scripts/smoke-openai.ts`)를 다시 실행해 `조건부·미검증`을 `실행 확인`으로 승격할 수 있는지 확인한다.
+- PRD 요구사항: §11.5(v1.4 실제 연동 전환 정책), §14.2(출시 직전 실행 확인 체크), §14 표(OpenAI 세 행 판정 갱신).
+- Red: 재실행 결과 `responses: pass, transcription: fail, speech: pass`(1차), 이후 재시도에서 `speech`도 간헐적으로 fail — 값을 직접 출력하지 않는 원시 `fetch` 프로브로 `/v1/audio/speech`·`/v1/responses`·`/v1/audio/transcriptions` 세 엔드포인트를 각각 재현했다. Responses/Speech는 반복 호출 시 403(`model_not_found`)에서 200으로 안정화되는 것을 관찰했다 — 프로젝트 모델 권한 변경이 OpenAI 쪽에서 전파되는 도중이었다(코드 문제 아님, 계정 설정 전파 지연). Transcription만 재현 시 계속 `400 invalid_value "Audio file might be corrupted or unsupported"`로 실패 — 이는 권한 문제가 아니라 `scripts/smoke-openai.ts`의 기존 fixture가 `data` 청크 길이 0인 사실상 빈 WAV였기 때문. 유효한 0.5초 무음 WAV(`data` 청크에 실제 무음 PCM 샘플 포함)로 원시 호출하면 200과 `{"text":""}`을 반환함을 확인했다. 이 시점에 어댑터를 직접 호출(`createOpenAiPort().transcribe(...)`)해보니 `transcription_empty` 예외가 던져지는 실제 버그를 발견했다 — `lib/server/openaiAdapter.ts`의 `if (!data.text) throw new Error('transcription_empty')`가 무음 오디오의 정상 응답인 빈 문자열(`""`)을 falsy로 오판해 실패로 취급하고 있었다.
+- Green: `openaiAdapter.ts`의 검사를 `if (!data.text)` → `if (typeof data.text !== 'string')`로 변경해, API가 실제로 응답 필드를 빠뜨리거나 malformed할 때만 예외를 던지고 정상적인 빈 문자열 전사는 통과시키도록 수정했다. 이 검사를 참조하는 기존 테스트는 없어 회귀 없이 수정 가능했다.
+- Refactor: `scripts/smoke-openai.ts`의 무효 WAV fixture도 함께 교체했다 — 44바이트 빈 헤더 대신 0.5초 분량의 실제 무음 PCM 데이터를 담은 유효한 WAV를 생성해 보내도록 해, 앞으로 이 스크립트가 "권한 없음"과 "잘못된 테스트 fixture"를 혼동해 보고하지 않게 했다.
+- 변경 파일: `lib/server/openaiAdapter.ts`, `scripts/smoke-openai.ts`.
+- 검증 명령과 결과:
+  - `npx tsx scripts/smoke-openai.ts`: 수정 후 3회 연속 `{"responses":"pass","transcription":"pass","speech":"pass"}`, exit 0으로 안정적으로 통과. **PRD §14 표의 OpenAI 세 행은 이 시점부로 `조건부·미검증`에서 `실행 확인`으로 승격한다** (표 문구 자체는 다음 PRD 편집에서 갱신 예정).
+  - `npm test -- --run`: 21 test files, 157 tests 통과(회귀 없음).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 전 라우트 생성 성공.
+- 의사결정: 이번 발견은 두 가지가 섞여 있었다는 점을 분명히 남긴다 — (1) 계정 모델 권한은 소유자의 변경 이후 실제로 해금되었으나 OpenAI 쪽 전파 지연으로 초기 재시도가 flaky하게 실패했다(코드가 손댈 수 없는 외부 요인), (2) 그와 별개로 `openaiAdapter.ts`에는 무음/짧은 오디오의 정상 빈 응답을 오류로 오분류하는 실제 버그가 있었다(코드 결함, 이번에 수정). 두 원인을 구분하지 않았다면 "권한이 아직도 없다"고 잘못 결론 내릴 뻔했다.
+- 알려진 제한/다음 단계: 실제 사용자 음성(무음이 아닌)에 대한 전사 정확도는 여전히 검증하지 않았다 — smoke test는 연결·권한만 확인한다. `SpeechControls.tsx`가 `/api/ai/speech`를 실제로 소비하도록 클라이언트 재생 배선은 여전히 다음 과제로 남아 있다.
+- 예정 커밋 메시지: `fix: OpenAI 전사 어댑터의 빈 응답 오분류 수정`
