@@ -4,12 +4,25 @@ import { SpeechControls } from './SpeechControls';
 import { DemoBadge } from './DemoBadge';
 import { StatusPill } from './StatusPill';
 import { statusLabelFor } from '@/lib/domain/policies';
-import type { ServiceRequestDraft } from '@/lib/domain/types';
+import type { ServiceRequest, ServiceRequestDraft } from '@/lib/domain/types';
+import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
+import { PollingRealtimeClient } from '@/lib/client/pollingRealtimeClient';
+import type { RealtimeClientPort } from '@/lib/client/realtimePort';
 
 type Step = 'home' | 'listening' | 'confirm' | 'answer' | 'request' | 'emergency' | 'requests' | 'companion' | 'sent';
-type MyRequest = { id: string; type: string; status: 'new' | 'in_progress' | 'done' | 'rejected'; summary: string };
 
 const typeLabel: Record<string, string> = { hospital_escort: '병원 동행 요청', welfare_info: '복지 정보 안내', daily_help: '일상 도움 요청' };
+
+async function fetchMyRequests(): Promise<ServiceRequest[]> {
+  const res = await fetch('/api/service-requests');
+  const body = await res.json();
+  return body.data as ServiceRequest[];
+}
+
+function useSeniorRealtime(): RealtimeClientPort {
+  const [client] = useState(() => new PollingRealtimeClient(fetchMyRequests));
+  return client;
+}
 
 export function SeniorExperience() {
   const [step, setStep] = useState<Step>('home');
@@ -17,7 +30,8 @@ export function SeniorExperience() {
   const [heard, setHeard] = useState('');
   const [answer, setAnswer] = useState('');
   const [draft, setDraft] = useState<ServiceRequestDraft | null>(null);
-  const [myRequests, setMyRequests] = useState<MyRequest[]>([]);
+  const realtime = useSeniorRealtime();
+  const { requests: myRequests, refetch: refetchMyRequests } = useServiceRequestList({ realtime, fetchList: fetchMyRequests });
 
   const ask = async (text: string, priorDraft?: ServiceRequestDraft) => {
     const res = await fetch('/api/ai/respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, inputType: 'text', priorDraft }) });
@@ -45,8 +59,8 @@ export function SeniorExperience() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: draft.type, summary: draft.summary, transcript: draft.transcript, inputType: draft.inputType, details: draft.details, missingFields: draft.missingFields, idempotencyKey, confirmed: true }),
     });
-    const created = await res.json();
-    setMyRequests((prev) => [{ id: created.id, type: draft.type, status: created.status, summary: draft.summary }, ...prev]);
+    await res.json();
+    await refetchMyRequests();
     setDraft(null);
     setStep('sent');
   };
