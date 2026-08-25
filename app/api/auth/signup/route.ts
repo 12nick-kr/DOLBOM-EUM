@@ -21,7 +21,15 @@ export async function POST(request: NextRequest) {
         app_metadata: { role, demo_account: true },
         user_metadata: { display_name: displayName, phone_alias: phone },
       });
-      if (error || !data.user) throw new Error(error?.message ?? '계정을 만들지 못했어요.');
+      if (error || !data.user) {
+        // Phone(전화번호) 로그인 provider가 프로젝트에서 꺼져 있으면 매 시도가 여기서 실패한다.
+        // 서버 로그에 원문을 남겨 콘솔 재조회 없이 원인을 바로 알 수 있게 한다.
+        console.error('[auth/signup] Supabase createUser 실패:', error?.code, error?.message);
+        if (error?.code === 'phone_provider_disabled' || /phone.*(disabled|not enabled)/i.test(error?.message ?? '')) {
+          throw new Error('PHONE_PROVIDER_DISABLED');
+        }
+        throw new Error(error?.message ?? '계정을 만들지 못했어요.');
+      }
 
       // 이후 어느 단계가 실패하든(프로필 저장, 로그인) 방금 만든 auth 사용자를 정리한다.
       // 그렇지 않으면 이 번호로는 다시는 가입할 수 없는 고아 계정이 영구히 남는다 —
@@ -59,6 +67,9 @@ export async function POST(request: NextRequest) {
     // "이미 가입됨"으로 뭉뚱그리지 않는다 — 안 그러면 실제 원인을 알 수 없게 된다.
     if (raw.includes('이미 사용') || /already.*registered/i.test(raw)) {
       return NextResponse.json({ error: '이미 가입된 가상 전화번호예요. 다른 번호를 사용해 주세요.' }, { status: 409 });
+    }
+    if (raw === 'PHONE_PROVIDER_DISABLED') {
+      return NextResponse.json({ error: '지금은 계정을 만들 수 없어요. 서비스 설정을 점검 중이에요. 잠시 후 다시 시도해 주세요.' }, { status: 503 });
     }
     return NextResponse.json({ error: '계정을 만들지 못했어요. 잠시 후 다시 시도해 주세요.' }, { status: 500 });
   }
