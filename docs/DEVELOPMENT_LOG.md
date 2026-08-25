@@ -288,3 +288,30 @@
 - 의사결정: 서버 TTS 요청 타임아웃은 `AbortController` 5초로 클라이언트에서도 동일하게 걸었다 — 서버(`app/api/ai/speech/route.ts`)가 이미 5초 내부 타임아웃으로 JSON 폴백을 반환하지만, 네트워크 자체가 느리거나 응답이 오지 않는 경우까지 대비해 클라이언트도 독립적으로 타임아웃한다(PRD FR-07 "5초를 넘기면 브라우저 TTS 폴백"은 사용자 체감 기준이지 서버 내부 시간만이 아니다).
 - 알려진 제한/다음 단계: 이제 코드 경로는 실제 서버 TTS를 시도하지만, Supabase 스키마가 아직 실제 프로젝트에 적용되지 않아(다음 항목 참고) 요청 카드 등록→복지사 업무함 실시간 반영의 전체 수직 흐름은 실제 DB 대상으로는 아직 검증되지 않았다.
 - 예정 커밋 메시지: `feat: SpeechControls가 실제 서버 TTS를 우선 사용하도록 연결`
+
+## 2026-08-25 — 실제 Supabase 적용 준비: 데모 ID를 UUID로 교정, PATCH 권한 검증 추가
+
+- 목표: 소유자가 Supabase URL/키를 `.env`에 넣었다고 알려와, 실제 프로젝트에 `0001_demo_schema.sql`을 적용하기 전 코드가 실제로 그 스키마와 맞물려 동작하는지 재검토한다. 검토 중 두 개의 실제 결함을 발견해 함께 고쳤다.
+- PRD 요구사항: §11.5(실제 연동 전환 정책), §7.4("상태 변경은 반드시 서버에서 권한을 재검증한다. UI에서 버튼을 숨긴 것만으로 권한 통제를 대신하지 않는다"), §13(데이터 모델 — `service_requests.senior_id`/`assignee_id`가 `profiles(id uuid)` 참조).
+- Red/발견 경위:
+  1. 실제 프로젝트에 `GET /rest/v1/service_requests`를 원시 호출해 테이블이 아직 없음을 먼저 확인(`PGRST205`). 적용 전 스키마를 재검토하던 중 `lib/server/store.ts`의 `demoSeniorId = 'senior-demo-001'` 같은 슬러그 문자열이 `service_requests.senior_id uuid not null references profiles(id)` 컬럼에 들어갈 수 없다는 것을 발견했다 — 마이그레이션을 그대로 적용한 뒤 노인이 요청을 등록하면 uuid 캐스팅 오류 또는 FK 위반으로 즉시 실패했을 것이다(아직 실제 DB에 반영되지 않았으므로 재현은 원시 fetch/코드 리뷰로만 확인).
+  2. 같은 검토 중 `app/api/service-requests/[id]/route.ts`의 PATCH가 클라이언트가 body로 보낸 `assigneeId`를 그대로 신뢰해 저장한다는 것도 발견했다 — 인증·역할 검사가 전혀 없어 아무 요청이나 다른 사람의 워커 ID를 자칭해 담당자로 등록할 수 있었다. `tests/service-request-transition-route.test.ts`(신규)에 이 두 가지를 검증하는 실패 테스트를 먼저 작성했고, 실행 결과 "워커가 아닌 senior 행위자도 200으로 상태를 바꿀 수 있다"는 걸로 실패를 확인했다(원하는 이유로 실패).
+- Green:
+  - `lib/server/store.ts`: `demoSeniorId`/`demoFamilyId`/`demoWorkerId`를 고정 UUID 세 개로 교체하고, 대응하는 `profiles`/`care_relationships`/`consent_grants` 시드가 필요하다는 주석을 남겼다.
+  - `supabase/migrations/0002_seed_demo_profiles.sql`(신규): 위 세 UUID에 대응하는 `profiles` 행, 복지사↔노인·가족↔노인 `care_relationships`, 가족의 `scope='service'` 동의를 시딩한다. `0001_demo_schema.sql` 적용 **이후** 실행해야 한다(소유자가 SQL Editor에서 직접 실행).
+  - `lib/server/ai.ts`, `lib/server/openaiAdapter.ts`: `seniorId` 기본값으로 쓰던 하드코딩 문자열 `'senior-demo-001'`을 `demoSeniorId` import로 교체 — 실제 호출 경로에서는 항상 실제 seniorId가 전달되므로 이 기본값은 사실상 도달하지 않지만, 도달할 경우에도 유효하지 않은 UUID를 만들지 않도록 방어했다.
+  - `app/api/service-requests/route.ts`: `seniorIdsAssignedTo('worker-demo-001')` 하드코딩을 `seniorIdsAssignedTo(demoWorkerId)`로 교체.
+  - `app/api/service-requests/[id]/route.ts`: `demoActor(request)`로 행위자를 확인해 `role !== 'worker'`면 403을 반환하도록 추가하고, PATCH body의 `assigneeId` 필드 자체를 스키마에서 제거했다 — assignee는 이제 항상 인증된 `actor.id`에서만 나온다.
+  - `components/WorkerDashboard.tsx`: PATCH 호출에서 `assigneeId: 'worker-demo-001'`을 제거(서버가 더 이상 그 필드를 받지 않으므로 보내도 무시됨, 코드도 정리).
+  - `tests/service-requests-list-route.test.ts`: 하드코딩된 `'senior-demo-001'` 비교를 `demoSeniorId` import로 교체 — ID 형식 변경에 따른 회귀.
+- Refactor: 없음(이번 단위는 실제 배포 전 검증에서 나온 결함 수정이 본질).
+- 변경 파일: `lib/server/store.ts`, `lib/server/ai.ts`, `lib/server/openaiAdapter.ts`, `app/api/service-requests/route.ts`, `app/api/service-requests/[id]/route.ts`, `components/WorkerDashboard.tsx`, `tests/service-requests-list-route.test.ts`, `tests/service-request-transition-route.test.ts`(신규), `supabase/migrations/0002_seed_demo_profiles.sql`(신규).
+- 검증 명령과 결과:
+  - `npm test -- --run`: 23 test files, 163 tests 통과(기존 161 → 163, 신규 service-request-transition-route 2).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: `.next` 캐시를 지운 뒤 클린 빌드로 21개 라우트 모두 생성 성공(캐시가 남아있는 상태에서 한 번 `Cannot find module for page` 오류가 났으나 `rm -rf .next` 후 재현되지 않아 이번 변경과 무관한 stale 캐시로 판단).
+  - 실제 Supabase 프로젝트 대상 검증: **아직 미실행.** `0001_demo_schema.sql`이 소유자에 의해 아직 적용되지 않았다(`GET /rest/v1/service_requests` → `PGRST205 table not found`, 이번 세션에서 재확인). 적용 후 `0002_seed_demo_profiles.sql`까지 실행되면 다음 단위에서 실제 INSERT/조회로 재검증한다.
+- 의사결정: PATCH에서 `assigneeId`를 body 스키마에서 완전히 제거하는 대신 "받되 무시"하는 선택지도 있었지만, 그러면 클라이언트가 여전히 그 필드를 보낼 수 있다는 오해를 남긴다고 판단해 스키마 자체에서 제거했다 — 필드가 없으면 실수로도 신뢰할 수 없다. 이 PATCH 인증은 여전히 `demoActor`(쿠키/헤더 기반 자리표시자)에 의존한다 — 실제 Supabase Auth 전환 전까지는 근본적인 한계이며, RLS의 `service_requests_update_assigned_worker` 정책이 `auth.uid()`를 검사하도록 되어 있어도 지금은 `SUPABASE_SECRET_KEY`(RLS 우회)로 접속하므로 이 애플리케이션 레벨 검사가 유일한 방어선이다.
+- 알려진 제한/다음 단계: 실제 Supabase Auth가 붙기 전까지 이 저장소의 모든 권한 검사(role, 소유권)는 `demoActor`의 쿠키/헤더 값을 그대로 신뢰한다 — 쿠키 위조 방지는 세션 서명/HttpOnly 속성에 의존하며 별도의 실 사용자 인증은 아니다. 이는 이번 단위의 범위가 아니었고 PRD §11.5/§16의 "일반 요청은 사용자 JWT + RLS로 처리" 목표로 가는 중간 단계로 문서화해 둔다.
+- 예정 커밋 메시지: `fix: 실제 배포 대비 데모 UUID 교정과 요청 상태 변경 권한 검증 추가`

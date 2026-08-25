@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requestDetailsSchema, requestInputTypeSchema, requestTypeSchema } from '@/lib/domain/types';
 import { redactForRole } from '@/lib/domain/policies';
 import { demoActor } from '@/lib/server/auth';
-import { demoSeniorId, seniorIdsAssignedTo, serviceRequests } from '@/lib/server/store';
+import { demoSeniorId, demoWorkerId, seniorIdsAssignedTo, serviceRequests } from '@/lib/server/store';
 
 const createSchema = z.object({
   type: requestTypeSchema,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     ? await serviceRequests.listForSenior(actor.id)
     : actor.role === 'worker'
       ? all.filter((row) => seniorIdsAssignedTo(actor.id).includes(row.seniorId))
-      : all.filter((row) => seniorIdsAssignedTo('worker-demo-001').includes(row.seniorId) || row.seniorId === demoSeniorId);
+      : all.filter((row) => seniorIdsAssignedTo(demoWorkerId).includes(row.seniorId) || row.seniorId === demoSeniorId);
   // 가족 화면에는 별도 동의(transcriptConsent) 없이는 원문을 노출하지 않는다.
   const data = scoped.map((row) => redactForRole(row, actor.role, { transcriptConsent: false }));
   return NextResponse.json({ data, is_demo: true });

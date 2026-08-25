@@ -46,7 +46,7 @@ export function WorkerDashboard() {
   };
 
   const takeCharge = async (id: string) => {
-    await fetch(`/api/service-requests/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_progress', assigneeId: 'worker-demo-001' }) });
+    await fetch(`/api/service-requests/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_progress' }) });
     await refetch();
     setApproved(true);
   };

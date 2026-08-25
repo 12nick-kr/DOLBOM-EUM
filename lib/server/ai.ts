@@ -3,6 +3,7 @@ import { intentResultSchema, type IntentResult } from '@/lib/domain/types';
 import { classifyUrgency } from '@/lib/domain/urgency';
 import { draftServiceRequest } from '@/lib/domain/requestDraft';
 import type { RequestInputType, ServiceRequestDraft } from '@/lib/domain/types';
+import { demoSeniorId } from './store';
 
 export type TranscribeResult = { transcript: string; isDemo: boolean };
 export type SpeechResult = { audio: ArrayBuffer | null; isDemo: boolean; contentType: string };
@@ -41,7 +42,7 @@ export const fixtureAi: AiPort = {
   async transcribe() {
     return { transcript: '다음 주 병원 갈 때 같이 갈 사람이 필요해요.', isDemo: true };
   },
-  async classifyAndDraft({ text, priorDraft, inputType = 'text', seniorId = 'senior-demo-001' }) {
+  async classifyAndDraft({ text, priorDraft, inputType = 'text', seniorId = demoSeniorId }) {
     const base = classifyWithHardEmergencyGate(text);
     return buildClassifyResult(text, priorDraft, inputType, seniorId, base);
   },

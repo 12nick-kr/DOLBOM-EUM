@@ -2,6 +2,7 @@ import { modelConfig } from '@/lib/config';
 import { intentResultSchema, type IntentResult } from '@/lib/domain/types';
 import { draftServiceRequest } from '@/lib/domain/requestDraft';
 import { classifyWithHardEmergencyGate, type AiPort, type ClassifyInput, type ClassifyResult, type SpeechResult, type TranscribeResult } from './ai';
+import { demoSeniorId } from './store';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
@@ -128,7 +129,7 @@ export function createOpenAiPort(env: Record<string, string | undefined> = proce
       if (effectiveIntent.intent !== 'service_request') return effectiveIntent;
       const draft = draftServiceRequest({
         text: input.text,
-        seniorId: input.seniorId ?? 'senior-demo-001',
+        seniorId: input.seniorId ?? demoSeniorId,
         inputType: input.inputType ?? 'text',
         priorDraft: input.priorDraft,
       });
