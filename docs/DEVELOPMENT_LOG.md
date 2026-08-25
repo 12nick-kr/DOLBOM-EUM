@@ -179,3 +179,33 @@
 - 의사결정: 긴급 판단 규칙은 여전히 순수 정규식 기반 fixture이며 실제 `gpt-5.6-terra` Responses 호출로 교체되지 않았다(§14.1 MVP 확정 선택에 따라 실제 API 미호출). PRD §11.1은 "고정 긴급 키워드와 부정 표현 규칙을 먼저 평가하고, 이후 모델이 구조화된 의도·답변을 반환"하는 2단계 구조를 요구하므로, 이 정규식 규칙은 실제 구현에서도 모델 호출 이전 1차 방어선으로 유지되어야 하며 모델 응답으로 대체되는 대상이 아니다. `FamilyDashboard`의 나머지 부분(전체 하드코딩 여부, `WorkerDashboard`와의 실시간 연동)은 Phase 4에서 이미 범위 밖으로 문서화했으므로 이번 Phase에서는 감사 로그 요구사항 충족에 필요한 "확인 완료" 버튼 하나만 최소 수정했다.
 - 알려진 제한/다음 단계: 위치 권한(Geolocation) 연동은 여전히 고정 데모 문자열("대전광역시 중구 (데모 위치)")이며 실제 브라우저 Geolocation API 호출·거부/타임아웃 폴백은 구현하지 않았다(PRD §7.1 "현재 위치 권한이 있으면 위치 ... 요약"의 조건부 요구이며, 이번 실행 범위에서 다루지 않은 잔여 항목). `WorkerDashboard`의 긴급 카드(`worker-emergency`)는 여전히 정적 데모 문구이며 실제 `emergency_events`/`GET /api/emergencies`로 연결되지 않았다 — Phase 6 이후 또는 별도 후속 작업 대상. 긴급 화면 자체의 접근성(스크린 리더 `aria-live`, 200% 확대)은 DESIGN.md §7 토큰 위에서 렌더링되지만 별도 접근성 자동 검사는 Phase 8(E2E) 범위다.
 - 예정 커밋 메시지: `feat: 사람 확인 기반 긴급 대응 흐름 구현`
+
+## 2026-08-25 12:33 — Phase 6a: 실제 OpenAI 어댑터 도입 (PRD v1.4 §11.5)
+
+- 목표: PRD v1.4 §11.5/TDD §3.3·§3.11의 "자격증명이 있으면 실제 연동이 표준 실행 경로" 정책에 따라, `AiPort`(전사·의도분류·TTS)의 실제 OpenAI 어댑터를 만들고 세 라우트(`/api/ai/transcribe`, `/api/ai/respond`, `/api/ai/speech`)를 fixture 대신 이 포트에 연결한다. 자격증명이 없거나 호출이 실패하면 조용히 mock으로 대체하지 않고 명확한 오류 상태를 반환한다.
+- PRD/TDD 근거: PRD §11.1(요청 흐름), §11.2(모델 라우팅), §11.5(신설, 실제 연동 전환 정책), §12(API 계약), FR-04/FR-07, TDD §3.6(아키텍처 경계)·§3.7(음성 답변 계약)·§3.11(외부 API 기본 정책).
+- Red:
+  1. `tests/ai-port.test.ts` 신설 — `fixtureAi`(transcribe/classifyAndDraft/speech)와 `selectAiPort()`(자격증명 존재 여부로 fixture vs openai 선택하는 단일 결정 지점)가 아직 없어 import 실패로 확인.
+  2. `tests/chat-use-case.test.ts`를 비동기 `respondToUtterance`(AiPort 주입 가능)로 갱신 — 기존 동기 함수 시그니처와 충돌해 실패 확인 후 갱신.
+  3. `tests/transcribe-route.test.ts` 신설 — 빈/과대/비오디오 MIME 업로드 거부(400/413/415)와 정상 업로드 처리(200)를 검증하는 테스트를 먼저 작성, 기존 라우트가 `POST()`에 파라미터조차 받지 않아 즉시 실패 확인.
+- Green:
+  - `lib/server/ai.ts`: `AiPort` 인터페이스를 `transcribe(audio, mimeType)`/`classifyAndDraft(input)`/`speech(text)`로 재정의했다. `classifyWithHardEmergencyGate`(=기존 `classifyUrgency`)를 공용 헬퍼로 분리해 fixture와 real 어댑터가 동일하게 "고정 긴급 키워드 규칙을 모델 호출보다 먼저 평가"하도록 강제했다(TDD §3.6). `fixtureAi`는 네트워크 없이 이 구조를 그대로 흉내 낸다.
+  - `lib/server/openaiAdapter.ts`(신규): `createOpenAiPort(env)`가 실제 어댑터를 만든다. `transcribe`는 `multipart/form-data`로 `gpt-transcribe`를, `classifyAndDraft`는 (긴급 하드 게이트를 먼저 통과시킨 뒤) Structured Outputs(JSON Schema, `strict: true`)로 `gpt-5.6-terra` Responses API를, `speech`는 `gpt-4o-mini-tts` Speech endpoint를 호출한다. 세 호출 모두 `OPENAI_API_KEY`+`OpenAI-Project` 헤더 하나로 인증하고 `store: false`를 명시한다. 모델이 자체적으로 emergency를 주장해도 하드 게이트를 이미 통과한 뒤이므로 emergency로 재격상하지 않는다(최종 긴급 판정은 규칙 엔진 하나만 담당).
+  - `lib/server/aiFactory.ts`(신규): `selectAiPort(env)` — `OPENAI_API_KEY`와 `OPENAI_PROJECT_ID`가 **모두** 있을 때만 real adapter, 하나라도 없으면 fixture. 이 라우트들의 유일한 분기점이다.
+  - `lib/server/chatUseCase.ts`: `respondToUtterance(input, ai = fixtureAi)`로 변경, 내부 regex 직접 호출을 제거하고 주입된 `AiPort.classifyAndDraft`에 위임한다.
+  - `app/api/ai/respond/route.ts`: `selectAiPort()`로 포트를 고르고 `await respondToUtterance(data, ai)`. 실패 시 502 + "지금은 연결할 수 없어요" 메시지(mock 대체 아님).
+  - `app/api/ai/transcribe/route.ts`: 실제 `multipart/form-data` 파싱, 크기(10MB)·MIME(`audio/*`) 검증, 전사 후 오디오 버퍼를 어떤 저장소에도 쓰지 않고 함수 스코프에서 폐기.
+  - `app/api/ai/speech/route.ts`: 소유권 검증(`state.turns`에서 `assistant_turn_id`+`senior_id` 매치)은 그대로 유지하고, 실제 합성은 `AiPort.speech`에 위임. 5초 타임아웃(`withTimeout`)을 넘기거나 호출이 실패하면 `speech_status: 'browser_fallback'` JSON으로 폴백, 성공 시 `audio/mpeg` 바이너리 스트림 + `Cache-Control: private, no-store`.
+  - `components/SeniorExperience.tsx`: `record()`를 실제 `MediaRecorder`/`getUserMedia` 녹음(4초 캡처 후 자동 정지, PRD 최대 60초 상한 이내) → `FormData` 업로드로 교체했다. 브라우저가 마이크/`MediaRecorder`를 지원하지 않거나 권한이 거부되면 조용히 멈추지 않고 텍스트 입력 폴백 안내로 전환한다.
+  - `vitest.config.ts`: `tests/transcribe-route.test.ts`만 `node` 환경으로 실행하도록 `environmentMatchGlobs` 추가 — jsdom의 `Blob`/`FormData`가 undici(Next `NextRequest.formData()`가 내부적으로 쓰는 파서)의 webidl 검사와 호환되지 않아(멀티파트 파싱이 `assert(webidl.is.File(value))`에서 예외) 실제 런타임과 같은 undici 경로로 검증하기 위함(테스트 환경 한정 이슈이며 프로덕션 Node 런타임에는 영향 없음을 별도 `node -e` 스크립트로 직접 확인).
+- Refactor: 없음(이번 단위는 포트 재정의와 라우트 배선이 본질이며 별도 구조 정리 대상은 발견하지 못했다).
+- 변경 파일: `lib/server/ai.ts`, `lib/server/openaiAdapter.ts`(신규), `lib/server/aiFactory.ts`(신규), `lib/server/chatUseCase.ts`, `app/api/ai/respond/route.ts`, `app/api/ai/transcribe/route.ts`, `app/api/ai/speech/route.ts`, `components/SeniorExperience.tsx`, `vitest.config.ts`, `tests/ai-port.test.ts`(신규), `tests/transcribe-route.test.ts`(신규), `tests/chat-use-case.test.ts`, `scripts/smoke-openai.ts`(신규, §14.2 owner 실행용).
+- 검증 명령과 결과:
+  - `npm test -- --run`: 20 test files, 151 tests 통과(기존 140 → 151, 신규 ai-port 6 + transcribe-route 5 순증가).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 18개 라우트 모두 생성 성공.
+  - **실제 OpenAI smoke test (PRD §14.2, 소유자 승인 하에 이번 세션에서 직접 실행, `npx tsx scripts/smoke-openai.ts`)**: `gpt-5.6-terra`(Responses), `gpt-transcribe`(Transcription), `gpt-4o-mini-tts`(Speech) **3종 모두 실패**. 원인은 코드 결함이 아니라 계정 설정: `OPENAI_API_KEY`/`OPENAI_PROJECT_ID` 인증 자체는 성공(`GET /v1/models` 200 확인)했으나, 이 프로젝트의 모델 허용 목록에 세 모델이 전부 없다(`model_not_found`, "Project ... does not have access to model ..."). `GET /v1/models`로 실제 허용 목록을 직접 조회해 확인한 결과 이 프로젝트는 `gpt-5.6-luna`와 `text-embedding-3-small` 두 모델만 접근 가능하며 `gpt-5.6-terra`/`gpt-transcribe`/`gpt-4o-mini-tts` 중 어느 것도 포함되지 않는다. 이는 PRD §11.2/§14가 미리 경고한 "남은 위험은 키가 아니라 계정 설정(프로젝트 모델 허용 목록)"에 정확히 해당하는 사례다. 값 자체(모델 id 목록 포함)는 개인정보가 아니므로 이 로그에 남기지만 키·토큰 값은 어디에도 출력하지 않았다.
+- 의사결정: smoke test 실패에도 불구하고 코드는 "자격증명이 있으면 실제 어댑터를 쓴다"는 PRD §11.5 정책대로 구현을 완료했다 — 이는 결함이 아니라 정확히 의도된 동작이며, 프로젝트 소유자가 OpenAI 대시보드에서 `gpt-5.6-terra`/`gpt-transcribe`/`gpt-4o-mini-tts` 모델 접근 권한을 프로젝트에 추가(또는 `OPENAI_TEXT_MODEL`/`OPENAI_TRANSCRIBE_MODEL`/`OPENAI_TTS_MODEL`을 실제 허용된 모델로 임시 조정)하는 즉시 코드 변경 없이 정상 동작한다. 긴급 하드 게이트(`classifyWithHardEmergencyGate`)는 모델 호출 실패와 무관하게 항상 먼저 평가되므로, 이 실패가 긴급 감지 안전성에는 영향을 주지 않는다.
+- 알려진 제한/다음 단계: §14 표의 OpenAI 세 행 판정은 `조건부·미검증`에서 **`조건부·실행 확인 시도함·실패(계정 모델 권한)`**로 갱신되어야 한다(문서 갱신은 소유자가 실제 계정 설정을 바꾼 뒤 재실행하는 다음 smoke test 결과를 기다린다). `SpeechControls.tsx`는 여전히 브라우저 `speechSynthesis`만 호출하며 `/api/ai/speech`를 실제로 소비하지 않는다 — 서버 TTS 배선은 이번 단위에서 API 라우트까지만 완료했고, 클라이언트 재생 연결은 다음 단위(우선순위 3 이후) 과제로 남는다. `scripts/smoke-openai.ts`는 owner가 필요할 때 재실행할 수 있도록 저장소에 남긴다(실행 자체가 비용을 발생시키므로 CI에 자동 연결하지 않는다).
+- 예정 커밋 메시지: `feat: 실제 OpenAI 전사·의도분류·TTS 어댑터 도입`

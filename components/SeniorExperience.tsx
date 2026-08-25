@@ -50,7 +50,50 @@ export function SeniorExperience() {
   };
 
   const submit = async () => { setHeard(input); await ask(input); };
-  const record = async () => { setStep('listening'); await new Promise((resolve) => setTimeout(resolve, 700)); const res = await fetch('/api/ai/transcribe', { method: 'POST' }); const data = await res.json(); setHeard(data.transcript); setStep('confirm'); };
+
+  /**
+   * 실제 마이크 녹음 → 업로드 → 서버 전사(`/api/ai/transcribe`) 흐름 (PRD §11.1/§12).
+   * `MediaRecorder`/`getUserMedia`를 지원하지 않는 환경(구형 브라우저, 테스트 jsdom, 마이크 권한
+   * 거부)에서는 조용히 실패하지 않고 텍스트 입력으로 폴백 안내를 표시한다(§17 "터치와 텍스트
+   * 대체 수단 제공").
+   */
+  const record = async () => {
+    setStep('listening');
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setAnswer('이 기기에서는 음성 녹음을 지원하지 않아요. 아래 텍스트로 입력해 주세요.');
+      setStep('answer');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks: BlobPart[] = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+      const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+      recorder.start();
+      // PRD §11.1 "최대 60초" — 60초 후 자동 종료.
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      recorder.stop();
+      stream.getTracks().forEach((track) => track.stop());
+      await stopped;
+
+      const audioBlob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      const form = new FormData();
+      form.append('audio', audioBlob, 'speech.webm');
+      const res = await fetch('/api/ai/transcribe', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setAnswer(data.error || '지금은 음성을 알아듣지 못했어요. 텍스트로 입력해 주세요.');
+        setStep('answer');
+        return;
+      }
+      setHeard(data.transcript);
+      setStep('confirm');
+    } catch {
+      setAnswer('마이크를 사용할 수 없어요. 아래 텍스트로 입력해 주세요.');
+      setStep('answer');
+    }
+  };
   const confirmHeard = async () => { await ask(heard); };
 
   const confirmRequest = async () => {

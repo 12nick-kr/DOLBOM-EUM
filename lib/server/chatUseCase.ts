@@ -1,6 +1,6 @@
-import { classifyUrgency } from '@/lib/domain/urgency';
-import { draftServiceRequest } from '@/lib/domain/requestDraft';
 import type { AssistantTurn, RequestInputType, ServiceRequestDraft } from '@/lib/domain/types';
+import type { AiPort } from './ai';
+import { fixtureAi } from './ai';
 import { id, state } from './store';
 
 export type ChatUseCaseInput = {
@@ -17,12 +17,13 @@ export type ChatUseCaseResult = AssistantTurn & { draft?: ServiceRequestDraft };
  * 이 함수를 그대로 공유한다 (PRD FR-04/FR-07, TDD §3.8). 복지 의도로 분류되면 자유 대화 로그가
  * 아니라 요청 카드 초안(`draft`)을 만들어 반환하고, 이 초안은 노인이 명시적으로 확인하기 전까지
  * 어떤 저장소에도 쓰지 않는다.
+ *
+ * 의도 분류/카드 초안 추출은 `AiPort.classifyAndDraft`에 위임한다 (기본값은 fixture 어댑터;
+ * 라우트는 `selectAiPort()`가 고른 실제 포트를 명시적으로 주입한다 — PRD §11.5). 고정 긴급
+ * 키워드 규칙은 두 어댑터 모두 모델 호출보다 먼저 평가한다(TDD §3.6).
  */
-export function respondToUtterance(input: ChatUseCaseInput): ChatUseCaseResult {
-  const classified = classifyUrgency(input.text);
-  // 이미 진행 중인 요청 초안에 대한 되물음 답변(예: 날짜만 말하는 짧은 답)은 그 자체로는
-  // service_request 키워드가 없을 수 있다. 초안이 있으면 계속 같은 흐름으로 취급한다.
-  const result = input.priorDraft && classified.urgency !== 'emergency' ? { ...classified, intent: 'service_request' as const } : classified;
+export async function respondToUtterance(input: ChatUseCaseInput, ai: AiPort = fixtureAi): Promise<ChatUseCaseResult> {
+  const result = await ai.classifyAndDraft({ text: input.text, priorDraft: input.priorDraft, inputType: input.inputType, seniorId: input.seniorId });
 
   const assistant_text = result.urgency === 'emergency'
     ? '지금 바로 긴급 도움 화면을 열었어요. 119에 전화할지 함께 확인해요.'
@@ -38,10 +39,6 @@ export function respondToUtterance(input: ChatUseCaseInput): ChatUseCaseResult {
     speech_status: 'idle',
     createdAt: new Date().toISOString(),
   };
-
-  if (result.intent === 'service_request') {
-    turn.draft = draftServiceRequest({ text: input.text, seniorId: input.seniorId, inputType: input.inputType, priorDraft: input.priorDraft });
-  }
 
   state.turns.push(turn);
   return turn;
