@@ -5,4 +5,9 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { ignores: ['.next/**', 'node_modules/**', 'coverage/**', 'next-env.d.ts'] },
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }],
+    },
+  },
 ];
