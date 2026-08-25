@@ -411,3 +411,10 @@
   - 외부 자격증명을 비운 인메모리 `npm run test:e2e`: 5개 통과. 텍스트 3단계, 긴급 전화 확인, compact viewport 비겹침, 역할 간 요청 전달·상태 변경·삭제를 검증했다.
   - 실제 자격증명 환경 E2E에서는 이번 변경의 노인 3단계/compact layout 3개가 통과했다. 기존 운영 DB에 긴급 데모 시드가 없고 `0004_service_request_delete.sql`이 아직 적용되지 않아 나머지 2개는 실패했으며, 이번 작업에서 원격 DB는 변경하지 않았다.
 - 외부 변경: 없음. 실제 Supabase 마이그레이션·데이터 쓰기는 수행하지 않았다.
+
+## 2026-08-25 — `0004` 삭제 정책 재실행 충돌 수정
+
+- 실제 Supabase SQL Editor에서 `0004_service_request_delete.sql`을 다시 실행할 때 이미 존재하는 `service_requests_delete_assigned_worker` 정책 때문에 PostgreSQL `42710 duplicate_object`가 발생했다.
+- Red: 마이그레이션이 정책 생성 전에 `drop policy if exists`를 포함하는지 검사하는 테스트를 추가했고 기존 SQL에서 실패를 확인했다.
+- Green: 동일 이름 정책을 먼저 제거한 뒤 현재 정의로 다시 생성하도록 수정했다. 제약조건은 기존 `drop constraint if exists`, 함수는 `create or replace`, publication 등록은 `duplicate_object` 예외 처리로 이미 재실행 가능하다.
+- 검증: `npm test -- --run` 30개 파일/189개 테스트, typecheck, lint, build 통과. 원격 Supabase에는 이 작업에서 직접 SQL을 실행하지 않았다.
