@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { emergencyEvents } from '@/lib/server/store';
-import { demoActor } from '@/lib/server/auth';
+import { authenticatedActor } from '@/lib/server/auth';
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const actor = demoActor(request);
+  const actor = await authenticatedActor(request);
+  if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
   const { id } = await context.params;
   const parsed = z.object({
     status: z.enum(['family_acknowledged', 'worker_followup', 'closed']),

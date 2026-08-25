@@ -1,0 +1,41 @@
+import { z } from 'zod';
+import { roleSchema } from '@/lib/domain/types';
+
+const virtualPhoneDigits = /^0100000\d{4}$/;
+
+export function normalizeVirtualPhone(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+export function formatVirtualPhone(value: string): string {
+  const digits = normalizeVirtualPhone(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
+export function virtualPhoneToE164(value: string): string {
+  const digits = normalizeVirtualPhone(value);
+  return `+82${digits.slice(1)}`;
+}
+
+export const virtualPhoneSchema = z.string().transform(normalizeVirtualPhone).pipe(
+  z.string().regex(virtualPhoneDigits, '가상 전화번호는 010-0000-0001 형식으로 입력해 주세요.'),
+);
+
+export const demoPinSchema = z.string().regex(/^\d{6}$/, '비밀번호는 숫자 6자리여야 해요.');
+
+export const signupSchema = z.object({
+  displayName: z.string().trim().min(2, '이름을 2자 이상 입력해 주세요.').max(30),
+  phone: virtualPhoneSchema,
+  pin: demoPinSchema,
+  pinConfirm: demoPinSchema,
+  role: roleSchema,
+}).refine((value) => value.pin === value.pinConfirm, { path: ['pinConfirm'], message: '비밀번호가 서로 달라요.' });
+
+export const loginSchema = z.object({
+  phone: virtualPhoneSchema,
+  pin: demoPinSchema,
+});
+
+export type DemoSignupInput = z.infer<typeof signupSchema>;

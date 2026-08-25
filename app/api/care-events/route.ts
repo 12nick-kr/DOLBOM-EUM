@@ -1,8 +1,8 @@
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
-import { demoActor } from '@/lib/server/auth';
+import { authenticatedActor, type AuthActor } from '@/lib/server/auth';
 import { getVisibleRequest } from '@/lib/server/serviceRequestVisibility';
-import { demoSeniorId, emergencyEvents, seniorIdsAssignedTo } from '@/lib/server/store';
+import { demoFamilyId, demoSeniorId, emergencyEvents, seniorIdsAssignedTo } from '@/lib/server/store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -10,11 +10,11 @@ export const runtime = 'nodejs';
 const encoder = new TextEncoder();
 const encode = (value: unknown) => encoder.encode(`data: ${JSON.stringify(value)}\n\n`);
 
-function canSeeSenior(actor: ReturnType<typeof demoActor>, seniorId?: string): boolean {
+function canSeeSenior(actor: AuthActor, seniorId?: string): boolean {
   if (!seniorId) return false;
   if (actor.role === 'senior') return actor.id === seniorId;
   if (actor.role === 'worker') return seniorIdsAssignedTo(actor.id).includes(seniorId);
-  return seniorId === demoSeniorId;
+  return actor.id === demoFamilyId && seniorId === demoSeniorId;
 }
 
 /** Supabase 변경을 역할별 안전 이벤트로 바꿔 전달한다. 원본 테이블 payload는 브라우저에 노출하지 않는다. */
@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key) return new Response('Realtime unavailable', { status: 503 });
-  const actor = demoActor(request);
+  const actor = await authenticatedActor(request);
+  if (!actor) return new Response('Authentication required', { status: 401 });
   const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   let channel: RealtimeChannel | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;

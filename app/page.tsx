@@ -1,1 +1,5 @@
-export default function Home() { return <main className="landing"><span className="demo-badge">챌린지 데모 — 실제 접수 아님</span><p className="eyebrow">DOLBOM EUM AI</p><h1>말 한마디가<br />함께 돌보는 일로 이어져요.</h1><p>돌봄이음 AI는 노인·가족·사회복지사를 동의 기반으로 연결하는 합성 데이터 데모입니다.</p><div className="role-cards"><a href="/api/session/senior" className="role-card"><span>👵</span><strong>어르신 화면</strong><small>큰 글씨와 음성·텍스트 도움</small></a><a href="/api/session/family" className="role-card"><span>👨‍👩‍👧</span><strong>부양가족 화면</strong><small>동의된 안심 정보와 위기 대응</small></a><a href="/api/session/worker" className="role-card"><span>🧑‍💼</span><strong>사회복지사 화면</strong><small>요청 업무함과 AI 행정 보조</small></a></div></main>; }
+import { redirect } from 'next/navigation';
+
+export default function Home() {
+  redirect('/login');
+}

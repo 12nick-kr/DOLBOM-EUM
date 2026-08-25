@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requestDetailsSchema, requestInputTypeSchema, requestTypeSchema, urgencySchema } from '@/lib/domain/types';
 import { classifyUrgency } from '@/lib/domain/urgency';
-import { demoActor } from '@/lib/server/auth';
+import { authenticatedActor } from '@/lib/server/auth';
 import { emergencyEvents, seniorInputs, seniorInputsProvider, serviceRequests } from '@/lib/server/store';
 
 const requestSchema = z.object({
@@ -28,7 +28,8 @@ const bodySchema = z.object({
  * 없으며, 입력 이벤트가 먼저 정본으로 남고 서비스 요청 카드는 sourceEventId로 연결된다.
  */
 export async function POST(request: NextRequest) {
-  const actor = demoActor(request);
+  const actor = await authenticatedActor(request);
+  if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
   if (actor.role !== 'senior') return NextResponse.json({ error: '노인 본인의 입력만 저장할 수 있어요.' }, { status: 403 });
   const parsed = bodySchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: '최종 확인한 입력 내용을 확인해 주세요.' }, { status: 400 });
@@ -85,7 +86,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const actor = demoActor(request);
+  const actor = await authenticatedActor(request);
+  if (!actor) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
   if (actor.role !== 'senior') return NextResponse.json({ error: '입력 원문은 노인 본인만 조회할 수 있어요.' }, { status: 403 });
   const data = await seniorInputs.listForSenior(actor.id);
   return NextResponse.json({ data, is_demo: seniorInputsProvider === 'in-memory' });
