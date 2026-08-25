@@ -1,17 +1,54 @@
 import { modelConfig } from '@/lib/config';
+import { intentResultSchema, type IntentResult } from '@/lib/domain/types';
 import { classifyUrgency } from '@/lib/domain/urgency';
-import type { AssistantTurn } from '@/lib/domain/types';
-import { id, state } from './store';
+import { draftServiceRequest } from '@/lib/domain/requestDraft';
+import type { RequestInputType, ServiceRequestDraft } from '@/lib/domain/types';
+import { demoSeniorId } from './store';
 
-export interface AiPort { respond(text: string, seniorId: string): AssistantTurn; transcribe(): { transcript: string; isDemo: boolean }; speech(turnId: string, actorSeniorId: string): AssistantTurn | null; }
-export const fakeAi: AiPort = {
-  respond(text, seniorId) {
-    const result = classifyUrgency(text);
-    const assistant_text = result.urgency === 'emergency' ? '지금 바로 긴급 도움 화면을 열었어요. 119에 전화할지 함께 확인해요.' : result.intent === 'service_request' ? '병원 동행 요청으로 정리했어요. 내용을 확인하고 담당자에게 보낼까요?' : '말씀해 주셔서 고마워요. 필요한 도움을 함께 찾아볼게요.';
-    const turn: AssistantTurn = { ...result, id: id('turn'), seniorId, assistant_text, speech_status: 'idle', createdAt: new Date().toISOString() };
-    state.turns.push(turn); return turn;
+export type TranscribeResult = { transcript: string; isDemo: boolean };
+export type SpeechResult = { audio: ArrayBuffer | null; isDemo: boolean; contentType: string };
+export type ClassifyInput = { text: string; priorDraft?: ServiceRequestDraft; inputType?: RequestInputType; seniorId?: string };
+export type ClassifyResult = IntentResult & { draft?: ServiceRequestDraft };
+
+/**
+ * 전사·의도 분류·음성 합성 포트 (PRD §11.5 표). 두 구현을 갖는다:
+ * - `fixtureAi`: 단위/컴포넌트 테스트 전용, 네트워크를 전혀 쓰지 않는다.
+ * - `openaiAi`(lib/server/openaiAdapter.ts): 자격증명이 있을 때 운영 경로가 쓰는 실제 어댑터.
+ * `lib/server/aiFactory.ts`가 둘 중 하나를 고르는 단일 결정 지점이다.
+ */
+export interface AiPort {
+  transcribe(audio: ArrayBuffer, mimeType: string): Promise<TranscribeResult>;
+  classifyAndDraft(input: ClassifyInput): Promise<ClassifyResult>;
+  speech(text: string): Promise<SpeechResult>;
+}
+
+/**
+ * 고정 긴급 키워드 규칙은 실제 모델 호출과 무관하게 항상 먼저 평가한다 (PRD §11.1/TDD §3.6:
+ * "고위험 판단은 모델만 믿지 않는다"). fixture와 real 어댑터 둘 다 이 순서를 지키도록,
+ * 공통 헬퍼로 분리해 두 구현이 동일하게 재사용한다.
+ */
+export function classifyWithHardEmergencyGate(text: string): IntentResult {
+  return classifyUrgency(text);
+}
+
+function buildClassifyResult(text: string, priorDraft: ServiceRequestDraft | undefined, inputType: RequestInputType, seniorId: string, base: IntentResult): ClassifyResult {
+  const result = priorDraft && base.urgency !== 'emergency' ? { ...base, intent: 'service_request' as const } : base;
+  const parsed = intentResultSchema.parse(result);
+  if (parsed.intent !== 'service_request') return parsed;
+  return { ...parsed, draft: draftServiceRequest({ text, seniorId, inputType, priorDraft }) };
+}
+
+export const fixtureAi: AiPort = {
+  async transcribe() {
+    return { transcript: '다음 주 병원 갈 때 같이 갈 사람이 필요해요.', isDemo: true };
   },
-  transcribe: () => ({ transcript: '다음 주 병원 갈 때 같이 갈 사람이 필요해요.', isDemo: true }),
-  speech(turnId, actorSeniorId) { const turn = state.turns.find((item) => item.id === turnId && item.seniorId === actorSeniorId); return turn ?? null; },
+  async classifyAndDraft({ text, priorDraft, inputType = 'text', seniorId = demoSeniorId }) {
+    const base = classifyWithHardEmergencyGate(text);
+    return buildClassifyResult(text, priorDraft, inputType, seniorId, base);
+  },
+  async speech() {
+    return { audio: null, isDemo: true, contentType: 'audio/mpeg' };
+  },
 };
+
 export const aiRuntime = { provider: 'fixture', models: modelConfig, store: false } as const;

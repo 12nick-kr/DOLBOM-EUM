@@ -1,18 +1,38 @@
 # 돌봄이음 AI — 제품 요구사항 정의서(PRD)
 
 > 작업명: **돌봄이음 AI**  
-> 문서 버전: v1.2  
+> 문서 버전: v1.4  
 > 작성 기준일: 2026-08-25  
-> 프로젝트 기간: 3일, 매일 10:00–18:00  
+> 프로젝트 기간: 3일 MVP로 시작해 실사용 SaaS로 전환 중  
 > 대상: 노인, 부양가족, 사회복지사
-> 외부 연동 검증 방식: 환경변수의 값이나 실제 API를 호출하지 않고 공식 문서와 환경변수 **이름**만 확인
+> 외부 연동 검증 방식: v1.4부터 실제 OpenAI API와 실제 Supabase 프로젝트를 사용한다. §11.5 참고
 
-### v1.2 변경 요약
+### v1.4 변경 요약
+
+- **mock/fixture 우선 정책을 폐기하고 실제 연동으로 전환한다.** 이전 버전은 "실제 API 호출 금지, 승인 전 mock만 사용"이 기본값이었다. v1.4부터 노인의 음성 전사, 의도 분류, 응답 음성 합성은 **실제 OpenAI API**를, 요청 카드 저장은 **실제 Supabase Postgres**를 기본 경로로 사용한다. §11.5(신설)가 이 정책을 정의한다.
+- **요청 카드 저장을 in-memory에서 Supabase Postgres로 전환한다.** `service_requests` 테이블과 §7.4의 카드 모델은 그대로 정본이지만, 저장소는 프로세스 재시작에도 살아남는 실제 DB여야 한다. `ServiceRequestRepository` 포트의 Supabase 구현체를 표준 경로로 승격한다(§11.5, §12).
+- **실시간 동기화를 Supabase Realtime `postgres_changes`로 전환한다.** §11.4의 in-memory `RealtimePort`는 테스트 전용 fake로 남고, 운영 경로는 실제 Supabase Realtime 구독을 사용한다.
+- **음성 파이프라인이 실제 오디오를 처리한다.** `/api/ai/transcribe`는 실제 업로드된 오디오 파일을 받아 `gpt-transcribe`로 전사하고, `/api/ai/respond`는 `gpt-5.6-terra`로 실제 의도 분류·요청 초안을 만들고, `/api/ai/speech`는 `gpt-4o-mini-tts`로 실제 음성을 스트리밍한다. §14의 `조건부·미검증` 판정은 실제 smoke test 통과로 `실행 확인`으로 승격된다(§11.5, §14.2).
+- **mock 데이터는 로컬 단위 테스트에만 남는다.** UI에 노출되는 실제 사용 경로에서 하드코딩된 배열이나 fixture 문구를 표시하지 않는다. 데모 배지는 "실제 접수 아님"이라는 안전 고지 목적으로만 유지하고, 데이터 자체는 실제로 저장·조회된다.
+
+<details>
+<summary>v1.3 변경 요약 (이력)</summary>
+
+- **요청 카드를 제품의 중심 객체로 승격했다.** 노인의 음성/텍스트 요청은 자유 대화 로그가 아니라 `service_requests` 한 행에 대응하는 **하나의 카드**로 저장되고, 세 역할 화면이 같은 카드 모델을 권한에 맞게 다르게 렌더링한다. 카드의 필드·상태 전이·표시 규칙을 §7.4에 신설했다.
+- **요청 등록 즉시 사회복지사 업무함에 반영되는 실시간 계약을 구체화했다.** 기존 FR-05가 "3초 이내 반영" 목표만 서술했던 것을, 채널·구독 범위·낙관적 반영·폴백·중복 방지까지 검증 가능한 인수 조건으로 다시 썼다(FR-05, FR-08, §11.4).
+- **디자인 명세를 `DESIGN.md`로 완전히 위임했다.** PRD는 화면이 무엇을 보여줘야 하는지(정보 요구사항)만 정의하고, 배치·간격·글자 크기 같은 시각 규칙은 PRD에 중복 기재하지 않는다. §17의 노인 UX 기준도 절대 픽셀값 대신 의미 기준으로 바꿨다.
+
+</details>
+
+<details>
+<summary>v1.2 변경 요약 (이력)</summary>
 
 - **음식 사진 분석 기능을 전면 제거했다.** 3일 MVP 대비 이미지 파이프라인의 리소스 소모와 운영·품질 관리 부담이 크다고 판단해, 노인 화면의 촬영·업로드 경로, `/api/ai/food`, FR, 관련 시나리오·테스트·위험 항목을 모두 삭제했다. 이에 따라 노인의 입력 방식은 **음성과 텍스트 두 가지**이며, 핵심 수직 시나리오는 **위기 대응과 복지 요청 두 개**로 축소된다.
 - **AI 호출 자격증명을 `OPENAI_API_KEY`와 `OPENAI_PROJECT_ID` 두 개로 통합했다.** 공식 문서 기준으로 Responses(`gpt-5.6-terra`), Transcription(`gpt-transcribe`), Speech(`gpt-4o-mini-tts`) 세 엔드포인트는 모두 동일한 API 키 하나로 인증하며 모델은 요청마다 `model` 필드로 선택하므로, 이 구성으로 PRD의 모든 모델을 호출할 수 있다. 두 키는 AI 기능에만 사용하고 Supabase·공공데이터·Kakao 키와 통합하지 않는다.
 - 다만 키의 존재가 모델 권한을 보장하지 않는다. 프로젝트의 모델 허용 목록, 결제·사용 등급, API 키의 restricted 스코프에 따라 실패할 수 있으므로 판정은 **`조건부·미검증`**을 유지하며, §14.2 smoke test로만 `실행 확인`으로 승격한다.
 - 이번 개정에서도 실제 API 호출은 하지 않았고 공식 문서와 환경변수 **이름**만 확인했다.
+
+</details>
 
 <details>
 <summary>v1.1 변경 요약 (이력)</summary>
@@ -105,6 +125,8 @@
 
 ## 7. 정보 구조와 화면 요구사항
 
+이 장은 각 화면이 **무엇을 보여주고 무엇을 할 수 있어야 하는지**만 정의한다. 배치, 간격, 색, 글자 크기 등 시각 규칙은 `DESIGN.md`가 단일 기준이며 이 문서에 중복 기재하지 않는다. 두 문서가 충돌하면 정보 요구사항은 PRD, 시각 표현은 `DESIGN.md`를 따른다.
+
 ### 7.1 노인 화면 `/senior`
 
 #### 홈 화면
@@ -124,6 +146,18 @@
 - AI가 구조화된 의도, 위험도, 필요한 정보, 제안 행동을 반환
 - 일반 정보는 바로 안내하고, 신청·연락·공유는 최종 확인 후 실행
 - 사용자가 “취소”, “다시 말할게”라고 말해도 동작
+
+#### 요청 카드 등록
+
+노인의 발화가 서비스 요청(`복지` 계열 의도)으로 분류되면 대화는 **요청 카드 한 장**으로 귀결된다. 자유 대화 로그를 그대로 업무 데이터로 쓰지 않는다.
+
+- AI가 발화에서 요청 종류, 희망 일시, 목적지, 이동 지원 필요 여부를 추출해 **카드 초안(`draft`)**을 화면에 보여준다.
+- 초안에는 AI가 만든 한 문장 요약과 노인이 말한 원문이 함께 보이며, 요약에는 `AI` 표시를 붙인다.
+- 누락 필드는 한 번에 하나씩만 되묻고, 되물음마다 초안 카드를 갱신한다.
+- 노인이 `보내주세요`를 누르거나 “맞아, 보내줘”라고 확인해야 카드가 **등록(`new`)**된다. 확인 전에는 어떤 화면에도 노출되지 않는다.
+- 등록 즉시 화면에 “담당자에게 보냈어요” 상태와 함께 카드가 `내 요청` 목록 맨 위로 이동한다.
+- 등록된 카드는 담당자가 처리에 착수하기 전(`new` 상태)까지만 노인이 직접 취소할 수 있다.
+- 노인 화면에는 내부 행정 메모와 담당자 간 메모를 노출하지 않고, §7.4의 쉬운 상태 문구만 보여준다.
 
 #### 챗봇 답변 음성 출력
 
@@ -197,9 +231,60 @@
 
 #### 요청 업무함
 
-- 상태: `신규`, `정보 확인`, `가족 확인`, `기관 연결`, `완료`, `반려`
-- 담당자 지정, 기한, 메모, 다음 행동
+- 상태 필터: `전체`, `신규`, `진행중`, `완료`
+- 카드에는 §7.4의 공통 슬롯과 함께 담당자, 기한, 다음 행동을 표시
+- 담당자 지정, 상태 변경, 메모 작성
 - 노인에게는 내부 행정 메모가 아니라 쉬운 상태 문구만 노출
+- **노인이 등록한 요청은 새로고침 없이 업무함 목록 맨 위에 나타난다.** 새로 도착한 카드는 확인 전까지 `미확인` 표시를 유지하고, 화면 상단의 `신규` 카운트가 함께 증가한다.
+- 복지사가 카드를 열면 `미확인` 표시가 해제되고, 누가 언제 확인했는지 기록된다.
+
+### 7.4 요청 카드 모델 (세 화면 공통)
+
+요청 카드는 이 제품의 중심 객체이며 `service_requests` 한 행에 1:1로 대응한다. 세 역할 화면은 **같은 카드 모델**을 권한에 맞게 다르게 렌더링할 뿐, 각자 다른 데이터 구조를 만들지 않는다.
+
+#### 카드 필드
+
+| 필드 | 설명 | 출처 |
+|---|---|---|
+| `id` | 카드 식별자 | 서버 생성 |
+| `senior_id` | 요청한 노인 | 세션 |
+| `type` | 요청 종류 (`hospital_escort`, `welfare_info`, `daily_help` 등 정의된 목록) | AI 분류 후 노인 확인 |
+| `summary` | 한 문장 요약 | AI 생성 (`AI` 표시 필수) |
+| `transcript` | 노인이 말한 원문 또는 입력 텍스트 | 전사/입력 |
+| `input_type` | `voice` \| `text` | 클라이언트 |
+| `details` | 희망 일시, 목적지, 이동 지원 필요 여부 등 구조화 필드 | AI 추출 + 노인 확인 |
+| `missing_fields` | 아직 못 채운 항목 | AI |
+| `status` | 아래 상태 전이 참조 | 서버 |
+| `assignee_id` | 담당 사회복지사 | 복지사 지정 |
+| `acknowledged_at` | 복지사가 처음 확인한 시각 | 서버 |
+| `created_at` / `updated_at` | 등록·갱신 시각 | 서버 |
+
+`transcript`는 노인 본인과 담당 복지사에게만 보인다. 가족에게는 동의 범위에 따라 `summary`와 상태만 공유하며, 원문 공유는 별도 동의 항목이다.
+
+#### 상태 전이
+
+```text
+draft ──(노인 확인)──> new ──(담당 지정/열람)──> in_progress ──> done
+  │                     │                            │
+  └──(노인 취소)        └──(노인 취소)               └──> rejected
+```
+
+- `draft`는 클라이언트 상태이며 서버에 저장하지 않는다. 노인 확인 시점에 처음 `new`로 생성된다.
+- `new → in_progress → done`은 담당 복지사만 수행한다.
+- 노인은 `new`까지만 취소할 수 있다. `in_progress` 이후 취소는 복지사에게 `정보 확인 요청`으로 전달된다.
+- 허용되지 않은 전이는 서버가 거부하고 감사 로그를 남긴다.
+- 상태 변경은 반드시 서버에서 권한을 재검증한다. UI에서 버튼을 숨긴 것만으로 권한 통제를 대신하지 않는다.
+
+#### 역할별 상태 문구
+
+같은 `status`를 역할별로 다르게 표기한다. 노인 화면에는 행정 용어를 쓰지 않는다.
+
+| `status` | 노인 화면 | 가족 화면 | 복지사 화면 |
+|---|---|---|---|
+| `new` | 담당자에게 보냈어요 | 접수됨 | 신규 |
+| `in_progress` | 담당자가 확인 중이에요 | 처리 중 | 진행중 |
+| `done` | 도움이 연결됐어요 | 완료 | 완료 |
+| `rejected` | 담당자가 다시 연락드릴 거예요 | 확인 필요 | 반려 |
 
 ## 8. 역할별 MVP 우선순위
 
@@ -231,16 +316,33 @@
 - 긴급 화면은 1초 이내 표시되고 119 전화 버튼은 한 번의 조작으로 연결된다.
 - 가족·사회복지사 알림 생성과 처리 상태 변경이 감사 로그에 남는다.
 
-### FR-04 서비스 요청
+### FR-04 서비스 요청 카드 생성
 
-- 음성에서 서비스 종류, 희망 일시, 목적지, 이동 지원 필요 여부를 추출한다.
-- 누락 필드는 한 번에 하나씩 질문한다.
-- 노인의 최종 확인 후 사회복지사 업무함에 `신규` 요청을 생성한다.
+- 음성 또는 텍스트 입력에서 서비스 종류, 희망 일시, 목적지, 이동 지원 필요 여부를 추출해 §7.4의 카드 초안을 만든다.
+- 누락 필드는 한 번에 하나씩 질문하고, 답변마다 초안 카드를 갱신한다.
+- 초안(`draft`) 상태에서는 서버에 저장되지 않으며 다른 역할의 화면에 나타나지 않는다.
+- 노인의 명시적 확인 후에만 `status = new`인 카드가 생성되고, 같은 확인 토큰으로 중복 생성되지 않는다(idempotency key).
+- 생성된 카드는 노인의 `내 요청` 목록과 담당 사회복지사의 업무함 양쪽에서 같은 `id`로 조회된다.
+- 음성 입력과 텍스트 입력은 같은 use case를 거쳐 **동일한 구조의 카드**를 만든다. `input_type`만 다르다.
 
 ### FR-05 실시간 협업
 
-- 긴급 알림과 요청 상태 변경이 연결된 화면에 3초 이내 반영되는 것을 목표로 한다.
-- 알림을 확인한 사람과 시각을 표시한다.
+- 요청 카드 등록과 상태 변경, 긴급 알림이 **연결된 다른 역할의 화면에 새로고침 없이 3초 이내** 반영되는 것을 목표로 한다.
+- 반영 범위는 권한이 있는 사용자로 제한한다. 담당 관계가 없거나 동의가 만료된 사용자에게는 전달되지 않는다.
+- 알림·카드를 확인한 사람과 시각을 표시한다.
+
+### FR-08 요청 카드 실시간 동기화
+
+FR-05의 목표를 요청 카드에 대해 검증 가능한 인수 조건으로 구체화한다.
+
+- 노인이 요청을 확정하면 담당 사회복지사의 업무함에 해당 카드가 **자동으로 추가된다.** 복지사는 어떤 조작도 하지 않는다.
+- 새로 도착한 카드는 목록 맨 위에 `미확인` 표시와 함께 나타나고, `신규` 카운트가 함께 증가한다.
+- 복지사가 상태를 바꾸면 노인 화면의 상태 문구가 §7.4 매핑에 따라 자동으로 갱신된다.
+- 실시간 채널이 끊기면 **화면을 비우지 않는다.** 마지막으로 받은 목록을 유지한 채 재연결을 시도하고, 연결 상태를 사용자에게 표시한다.
+- 재연결 시 누락 구간은 서버 재조회로 메운다. 실시간 이벤트만으로 목록의 정합성을 보장하지 않는다.
+- 같은 카드에 대한 이벤트가 중복 도착해도 목록에 두 번 나타나지 않는다(`id` 기준 upsert).
+- 실시간 전달이 완전히 실패해도 새로고침하면 같은 카드가 보인다. **실시간은 최적화이며 정본은 항상 서버 조회다.**
+- 자신이 담당하지 않는 노인의 카드 이벤트는 구독 자체가 되지 않아야 하며, 클라이언트 필터링에 의존하지 않는다.
 
 ### FR-06 근거 있는 정책 안내
 
@@ -367,6 +469,49 @@ KAKAO_REST_API_KEY=
 
 `SUPABASE_SECRET_KEY`, `DATA_GO_KR_SERVICE_KEY`, `KAKAO_REST_API_KEY`, `OPENAI_API_KEY`는 서버 전용이다. `.env*` 실제 파일은 Git에 커밋하지 않고 `.env.example`에는 빈 값과 설명만 둔다.
 
+### 11.4 요청 카드 실시간 동기화 구조
+
+FR-08을 구현하는 방식이다. 실시간 계층은 **UI 갱신 최적화**이며, 데이터의 정본은 언제나 서버 조회다.
+
+```text
+노인 확인
+  -> POST /api/service-requests        (서버가 권한·idempotency 검증 후 INSERT)
+    -> Postgres service_requests INSERT
+      -> Supabase Realtime (postgres_changes)
+        -> 담당 복지사 클라이언트가 카드 upsert
+```
+
+구현 규칙:
+
+- 구독 단위는 **담당 관계**다. 복지사 클라이언트는 자신에게 배정된 `senior_id` 집합에 해당하는 변경만 받는다. 전체 테이블을 구독하고 클라이언트에서 거르지 않는다.
+- 전달 범위는 RLS로 강제한다. Realtime 구독도 사용자 JWT를 사용하며, 서버 secret 키로 브로드캐스트하지 않는다.
+- 클라이언트는 카드 목록을 `id` 기준 map으로 관리하고 이벤트를 upsert로 처리한다. 순서가 뒤바뀐 이벤트는 `updated_at`이 더 오래된 경우 무시한다.
+- 화면 진입 시 한 번 목록을 조회해 초기 상태를 만들고, 그 뒤 구독을 연다. 구독 연결 전에 발생한 변경은 이 초기 조회가 덮는다.
+- 재연결 시 마지막 수신 시각 이후의 카드를 다시 조회해 누락 구간을 메운다.
+- 실시간 어댑터 뒤에 인터페이스를 두고 in-memory fake를 제공한다. 테스트가 실제 Supabase Realtime 연결에 의존하지 않아야 한다.
+- 노인 화면은 자신의 요청 카드만 구독하며, 상태 변경 이벤트를 §7.4의 역할별 문구로 변환해 표시한다.
+
+### 11.5 실제 연동 전환 정책 (v1.4)
+
+v1.3까지는 "승인 전 실제 외부 호출 금지"가 기본값이었다. v1.4부터 아래 두 조건이 모두 성립하면 실제 연동이 **표준 실행 경로**다.
+
+1. 해당 기능에 필요한 자격증명(`OPENAI_API_KEY`/`OPENAI_PROJECT_ID`, 또는 `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`/`SUPABASE_SECRET_KEY`)이 서버 환경에 설정되어 있다.
+2. 프로젝트 소유자가 실제 호출을 승인했다(대화 기록 또는 커밋 메시지에 남긴다).
+
+**포트/어댑터 경계는 유지한다.** §11.1의 계층 구조(UI → use case → domain policy → port → adapter)는 그대로이며, "실제 어댑터가 기본"으로 바뀌는 것이지 도메인 코드가 provider에 직접 결합되는 것이 아니다. 각 포트는 최소 두 구현을 갖는다.
+
+| 포트 | 테스트용 구현 | 운영 구현 |
+|---|---|---|
+| `ServiceRequestRepository` | in-memory fake (단위 테스트) | Supabase Postgres adapter |
+| `RealtimePort` | in-memory fake (단위 테스트) | Supabase Realtime(`postgres_changes`) adapter |
+| `AiPort`(전사·의도·TTS) | fixture adapter (단위 테스트) | OpenAI Responses/Transcription/Speech adapter |
+
+**자격증명이 없거나 호출이 실패하면 조용히 mock으로 대체하지 않는다.** 사용자에게 "지금은 연결할 수 없어요" 같은 명확한 오류 상태를 보여주고, 긴급 버튼과 화면 텍스트 등 §3.7/FR-07의 폴백 규칙은 그대로 적용한다. 단, 이 폴백은 *장애 대응*이지 *기본 동작*이 아니다 — 자격증명이 있는 정상 환경에서는 항상 실제 연동을 시도한다.
+
+**Supabase 마이그레이션 적용은 사람이 수행한다.** `supabase/migrations/*.sql`은 저장소에 커밋되지만, 실제 프로젝트에 `apply`하는 것은 소유자가 Supabase 대시보드/CLI로 직접 하거나 명시적으로 승인한 자동화로만 한다. 코드가 스스로 스키마를 변경하지 않는다.
+
+**비밀 값 취급은 기존 규칙을 그대로 따른다.** `.env`는 커밋하지 않고, 로그·에러 메시지·테스트 스냅샷에 실제 키·토큰·서명 URL을 남기지 않는다. §16(개인정보·안전)과 §3.4(TDD 프롬프트의 비밀정보 사전 안전장치)는 v1.4에서도 예외 없이 적용된다.
+
 ## 12. 서버 API 초안
 
 | 메서드 | 경로 | 용도 |
@@ -377,8 +522,9 @@ KAKAO_REST_API_KEY=
 | POST | `/api/ai/intent` | 평가·회귀 테스트용으로 텍스트를 구조화된 의도와 위험도로만 변환 |
 | POST | `/api/emergencies` | 위기 이벤트 초안/확정 생성 |
 | PATCH | `/api/emergencies/:id` | 확인·연락·종료 상태 갱신 |
-| POST | `/api/service-requests` | 서비스 요청 생성 |
-| PATCH | `/api/service-requests/:id` | 담당자·상태·메모 갱신 |
+| GET | `/api/service-requests` | 역할·관계에 따라 허용된 요청 카드 목록 조회 (실시간 구독의 초기 상태·재동기화용) |
+| POST | `/api/service-requests` | 노인의 확인을 거친 요청 카드 생성; idempotency key로 중복 방지 |
+| PATCH | `/api/service-requests/:id` | 담당자·상태·메모 갱신; 허용되지 않은 상태 전이는 거부 |
 | GET | `/api/facilities/hospitals` | 병·의원 검색 프록시 |
 | GET | `/api/facilities/welfare` | 충남 노인복지시설 검색 프록시 |
 | GET | `/api/policies/recommendations` | 조건 기반 정책 추천 |
@@ -401,7 +547,7 @@ AI 함수는 `search_hospital`, `search_welfare_facility`, `draft_service_reques
 | `consent_grants` | `senior_id`, `grantee_id`, `scope`, `purpose`, `expires_at`, `revoked_at` |
 | `senior_health_profiles` | `senior_id`, `cautions`, `allergies`, `conditions`, `updated_by`, `verified_at` |
 | `observations` | `senior_id`, `type`, `value`, `source`, `recorded_at` |
-| `service_requests` | `senior_id`, `type`, `details`, `status`, `assignee_id`, `due_at` |
+| `service_requests` | `id`, `senior_id`, `type`, `summary`, `transcript`, `input_type`, `details`, `missing_fields`, `status`, `assignee_id`, `acknowledged_at`, `due_at`, `idempotency_key`, `created_at`, `updated_at` — §7.4의 요청 카드 정본 |
 | `emergency_events` | `senior_id`, `level`, `utterance`, `location`, `status`, `created_at` |
 | `emergency_actions` | `event_id`, `actor_id`, `action`, `result`, `created_at` |
 | `authority_documents` | `id`, `senior_id`, `holder_id`, `type`, `bucket`, `object_path`, `mime_type`, `size_bytes`, `sha256`, `review_status`, `reviewer_id`, `issued_at`, `expires_at`, `retention_until`, `deleted_at` |
@@ -441,15 +587,15 @@ AI 함수는 `search_hospital`, `search_welfare_facility`, `draft_service_reques
 
 ## 14. API 기능과 2026-08-24 실행 가능성 점검
 
-판정은 실제 인증 호출 결과가 아니라 **공식 문서의 현재 제공 여부 + 저장소의 환경변수 이름 존재 여부**를 합친 것이다. 사용자가 API 호출을 금지했으므로 `조건부·미검증`을 `실행 확인`으로 과장하지 않는다.
+아래 표는 v1.3까지의 판정(문서 확인만, 실제 호출 없음)을 이력으로 남긴 것이다. **v1.4부터 §11.5의 조건이 성립하는 항목은 실제 smoke test로 `실행 확인`으로 승격한다.** 표의 개별 판정 문구는 각 연동에 실제 자격증명이 설정되고 §14.2의 smoke test를 통과한 시점에 갱신한다. 아직 갱신 전인 행은 `조건부·미검증`을 유지한다 — 이는 "호출 금지"가 아니라 "아직 확인 전"이라는 뜻이다.
 
 | 서비스/API | 실제 기능 | 공식 문서 상태 | 현재 저장소 실행 준비 | 필요한 조치와 폴백 |
 |---|---|---|---|---|
-| OpenAI Responses API + `gpt-5.6-terra` | 텍스트 입력, 텍스트 답변, 의도 JSON, 함수 호출 | [현재 모델 카탈로그](https://developers.openai.com/api/docs/models/gpt-5.6-terra)에 제공 중. Structured Outputs와 function calling 지원 | **조건부·미검증.** `OPENAI_API_KEY`와 `OPENAI_PROJECT_ID` 이름은 있으나 값·모델 권한·결제·한도 미확인 | 프로젝트 대시보드에서 Terra 허용과 결제를 사람이 확인. 실패 시 시드 응답을 쓰되 `데모 데이터` 표시 |
-| OpenAI Transcription + `gpt-transcribe` | 완료된 녹음 파일 또는 Realtime 턴을 한국어 텍스트로 전사 | [고정확도 전사 모델](https://developers.openai.com/api/docs/models/gpt-transcribe)로 제공 중 | **조건부·미검증.** §11.2의 동일한 `OPENAI_API_KEY`·`OPENAI_PROJECT_ID`를 사용하며 별도 키가 필요 없다. 다만 Free tier 미지원 표시로 결제·모델 권한 미확인 | 60초/5MB 제한, 타임아웃, 전사문 사용자 확인. 실패 시 텍스트 직접 입력 |
-| OpenAI Speech + `gpt-4o-mini-tts` | 답변 텍스트를 음성으로 합성 | [Speech 모델](https://developers.openai.com/api/docs/models/gpt-4o-mini-tts)로 제공 중 | **조건부·미검증.** §11.2의 동일한 `OPENAI_API_KEY`·`OPENAI_PROJECT_ID`를 사용하며 별도 키가 필요 없다. 다만 프로젝트 권한·결제 미확인 | 서버 TTS 5초 초과/실패 시 브라우저 `speechSynthesis`; 긴급 문구는 로컬 고정 음원/문구 |
+| OpenAI Responses API + `gpt-5.6-terra` | 텍스트 입력, 텍스트 답변, 의도 JSON, 함수 호출 | [현재 모델 카탈로그](https://developers.openai.com/api/docs/models/gpt-5.6-terra)에 제공 중. Structured Outputs와 function calling 지원 | **실행 확인 (2026-08-25).** §14.2 smoke test 통과 — `docs/DEVELOPMENT_LOG.md` 참고. 모델 접근·결제·한도 모두 정상 | 실패(네트워크·모델 정책 변경 등) 시 사용자에게 "지금은 연결할 수 없어요" 오류 상태를 명확히 표시(§11.5) |
+| OpenAI Transcription + `gpt-transcribe` | 완료된 녹음 파일 또는 Realtime 턴을 한국어 텍스트로 전사 | [고정확도 전사 모델](https://developers.openai.com/api/docs/models/gpt-transcribe)로 제공 중 | **실행 확인 (2026-08-25).** §14.2 smoke test 통과. 무음/짧은 오디오의 정상 빈 응답(`text: ""`)을 오류로 오분류하던 어댑터 버그를 이번에 함께 수정 | 60초/5MB 제한, 타임아웃, 전사문 사용자 확인. 실패 시 텍스트 직접 입력 |
+| OpenAI Speech + `gpt-4o-mini-tts` | 답변 텍스트를 음성으로 합성 | [Speech 모델](https://developers.openai.com/api/docs/models/gpt-4o-mini-tts)로 제공 중 | **실행 확인 (2026-08-25).** §14.2 smoke test 통과 | 서버 TTS 5초 초과/실패 시 브라우저 `speechSynthesis`; 긴급 문구는 로컬 고정 음원/문구 |
 | OpenAI Realtime + `gpt-realtime-2.1-mini` | WebRTC/WebSocket 저지연 음성 입출력과 함수 호출 | [Realtime 모델](https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini)로 제공 중 | **조건부·MVP 제외.** 키 외 임시 세션·WebRTC 구현과 기기 테스트 필요 | Structured Outputs 미지원이므로 고위험 실행 판단에 사용하지 않고 P2 실험으로 격리 |
-| Supabase Auth/Postgres/RLS/Realtime/Storage | 로그인, 관계·동의 데이터, 실시간 상태, 비공개 문서 파일 | [Next.js Quickstart](https://supabase.com/docs/guides/getting-started/quickstarts/nextjs)와 [Storage private bucket](https://supabase.com/docs/guides/storage/buckets/fundamentals) 제공 중 | **현재 구성 불가.** URL·publishable·secret 키가 모두 없음 | Supabase 프로젝트와 3개 환경변수 추가. 연결 전에는 로컬 repository adapter와 시드 데이터 사용 |
+| Supabase Postgres(요청 카드) | `service_requests` 등록·조회·상태 전이, 역할별 조회 범위 | [Next.js Quickstart](https://supabase.com/docs/guides/getting-started/quickstarts/nextjs)와 [Storage private bucket](https://supabase.com/docs/guides/storage/buckets/fundamentals) 제공 중 | **실행 확인 (2026-08-25).** §14.2 절차대로 실제 프로젝트에 `0001_demo_schema.sql`/`0002_seed_demo_profiles.sql`을 적용하고, 실제 HTTP 호출로 카드 생성→worker 즉시 조회→family 조회(transcript 비노출)→idempotency 재전송→PATCH 권한 검증까지 확인함(`docs/DEVELOPMENT_LOG.md` 참고). 검증용 데이터는 즉시 삭제 | 실제 Supabase Auth·RLS(현재는 `SUPABASE_SECRET_KEY`로 우회)와 Realtime(현재는 클라이언트 폴링) 전환은 남은 과제 |
 | 국립중앙의료원 전국 병·의원 찾기 OpenAPI | 시도·시군구·기관·진료과목 등으로 병·의원 검색, XML 응답 | [공공데이터포털](https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15000736)에 현재 게시, 무료, 개발/운영 자동승인, 개발 1,000건 | **현재 구성 불가.** `DATA_GO_KR_SERVICE_KEY` 없음 | 활용신청 후 서버 프록시에서 XML 정규화. 데모 직전 smoke test, 실패 시 기준일이 표시된 fixture |
 | 충청남도 노인복지시설 OpenAPI | 시설명·상세주소·전화번호 검색, JSON/XML | [공공데이터포털](https://www.data.go.kr/data/15099688/openapi.do?recommendDataYn=Y)에 게시, 무료, 자동승인, 개발 10,000건 | **현재 구성 불가.** 공공데이터 키 없음 | 메타데이터 수정일이 2022-08-17이므로 응답 성공과 데이터 최신성을 별도 표시. 실패 시 fixture |
 | Kakao Local API | 키워드/카테고리/좌표/반경 기반 병원·약국·장소 검색 | [Local API 문서](https://developers.kakao.com/docs/ko/local/dev-guide)에 REST API 키 인증 방식으로 제공 중 | **현재 구성 불가.** `KAKAO_REST_API_KEY` 없음 | MVP 선택 기능. REST 키를 서버 헤더에만 넣고 쿼터·저장/재사용 정책 확인. 공공 API로 폴백 |
@@ -476,7 +622,7 @@ AI 함수는 `search_hospital`, `search_welfare_facility`, `draft_service_reques
 3. Supabase는 테스트 사용자로 로그인하고 본인 행 조회, 타인 행 차단, 비공개 버킷 업로드/다운로드/삭제를 확인한다.
 4. 두 공공 API는 최소 검색 1건의 상태코드·스키마·한글 인코딩을 확인하고 fixture와 contract가 맞는지 비교한다.
 5. Kakao Local을 활성화한 경우에만 테스트하고, 미설정이면 기능 플래그를 꺼 숨긴다.
-6. 이 smoke test는 이번 PRD 수정 작업에서는 실행하지 않는다.
+6. v1.4부터 이 smoke test는 OpenAI 자격증명이 설정된 즉시 실행 대상이다. Supabase는 프로젝트 키가 설정된 뒤 실행한다. 실행 결과(성공/실패, 실제 값 제외)는 `docs/DEVELOPMENT_LOG.md`에 남긴다.
 
 ## 15. 119 및 서비스 신청의 현실적 설계
 
@@ -521,8 +667,11 @@ AI 함수는 `search_hospital`, `search_welfare_facility`, `draft_service_reques
 
 ## 17. 노인 친화 UX 기준
 
-- 본문 글자 최소 20px, 주요 버튼 글자 24px 이상 권장
-- 터치 영역 최소 48×48px, 핵심 버튼은 더 크게 설계
+시각 토큰의 실제 수치는 `DESIGN.md`가 정의한다. 이 절은 **지켜야 할 성질**만 규정한다.
+
+- 노인 화면은 `DESIGN.md`의 `comfort` 밀도 스케일을 적용한다. 글자 크기를 컴포넌트마다 개별 지정하지 않는다.
+- 터치 영역 최소 48×48, 핵심 버튼은 화면 폭에 맞춰 더 크게
+- 200% 확대에서 가로 스크롤 없이 모든 기능을 사용할 수 있어야 함
 - 고대비 색상과 색 외의 아이콘·텍스트 병행
 - 한 화면 한 과업, 선택지는 최대 2개
 - 전문용어 대신 “신청서를 만들었어요. 담당자에게 보낼까요?” 같은 쉬운 문장
@@ -546,9 +695,11 @@ AI 함수는 `search_hospital`, `search_welfare_facility`, `draft_service_reques
 ### 18.2 노인 시나리오 2 — 병원동행 요청
 
 1. 어르신이 “다음 주 화요일 충남대병원 갈 때 같이 갈 사람이 필요해”라고 말한다.
-2. AI가 날짜, 목적지, 동행 필요를 추출하고 시간을 되묻는다.
-3. 어르신이 내용을 듣고 “맞아, 보내줘”라고 확인한다.
-4. 사회복지사 업무함에 병원동행 요청 초안이 생성되고 어르신 화면에는 “담당자가 확인 중이에요”가 표시된다.
+2. AI가 날짜, 목적지, 동행 필요를 추출해 요청 카드 초안을 화면에 보여주고, 비어 있는 시간을 한 번 되묻는다.
+3. 어르신이 초안 내용을 텍스트와 음성으로 확인하고 “맞아, 보내줘”라고 확정한다.
+4. 카드가 `신규` 상태로 등록되고, 담당 사회복지사가 업무함을 보고 있다면 **새로고침 없이** 목록 맨 위에 `미확인` 카드가 나타난다.
+5. 어르신 화면의 `내 요청`에는 같은 카드가 “담당자에게 보냈어요”로 표시된다.
+6. 복지사가 카드를 열어 담당을 맡으면 어르신 화면 문구가 “담당자가 확인 중이에요”로 자동으로 바뀐다.
 
 ### 18.3 부양가족 시나리오 1 — 위기 알림 대응
 
@@ -655,6 +806,15 @@ AI 함수는 `search_hospital`, `search_welfare_facility`, `draft_service_reques
 
 - 역할별 로그인과 화면 접근
 - 요청 생성 → 사회복지사 처리 → 노인/가족 상태 반영
+- 음성 입력과 텍스트 입력이 동일한 구조의 요청 카드를 만듦 (`input_type`만 다름)
+- 노인 확인 전 `draft` 카드가 서버에 저장되지 않고 복지사 화면에 나타나지 않음
+- 노인 확인 직후 담당 복지사 업무함에 새로고침 없이 카드가 추가되고 `신규` 카운트 증가
+- 같은 idempotency key의 재전송이 카드를 중복 생성하지 않음
+- 동일 카드 이벤트가 중복 도착해도 목록에 한 번만 나타남 (`id` upsert)
+- 실시간 연결이 끊겨도 기존 목록이 유지되고, 재연결 후 누락 카드가 재조회로 채워짐
+- 실시간을 완전히 비활성화해도 새로고침 시 같은 카드가 조회됨
+- 담당 관계가 없는 복지사에게 카드 이벤트가 전달되지 않음
+- 허용되지 않은 상태 전이(예: 노인의 `in_progress` 취소)를 서버가 거부
 - 긴급 이벤트 생성 → 두 역할에 실시간 알림
 - 공공 API 실패 시 대체 메시지와 재시도
 - 텍스트·음성 입력 각각에서 답변 텍스트와 TTS 요청 생성
