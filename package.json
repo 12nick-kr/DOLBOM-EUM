@@ -11,7 +11,8 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "test:all": "npm test -- --run && npm run typecheck && npm run lint && npm run build",
-    "seed:demo": "tsx scripts/reset-demo.ts"
+    "seed:demo": "tsx scripts/reset-demo.ts",
+    "auth:migrate-login-id": "tsx --env-file=.env.local scripts/migrate-login-identities.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
