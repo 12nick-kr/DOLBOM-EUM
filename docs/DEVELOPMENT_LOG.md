@@ -234,3 +234,22 @@
 - 의사결정: 새 migration 파일(`0002_*.sql`)은 이번 단위에서 만들지 않았다 — `0001_demo_schema.sql`의 `service_requests` 테이블·RLS 정책이 이 어댑터의 컬럼명(snake_case)·상태값과 정확히 일치하는 것을 코드 작성 중 재확인했고, 어댑터 구현 과정에서 스키마 조정이 필요한 결함을 발견하지 못했기 때문이다. 실제 Supabase 프로젝트에 연결해 smoke test를 실행하면서 스키마 불일치가 발견되면 그때 `0002_*.sql`을 추가한다. Realtime(`RealtimePort`)의 Supabase `postgres_changes` 어댑터는 이번 단위에서 다루지 않았다 — 저장소가 로컬 `onChange` 리스너로 발행하는 이벤트는 여전히 프로세스 내부에서만 전파되며, 여러 서버 인스턴스/실제 브라우저 클라이언트에 걸친 전파는 클라이언트가 여전히 `PollingRealtimeClient`(3초 폴링, `GET /api/service-requests` 재조회)로 대신한다 — 이는 실제 Supabase Postgres가 정본이 된 이후에도 여전히 "복지사와 부양가족이 동시에 같은 데이터를 본다"는 요구를 충족한다(폴링 대상이 이제 실제 공유 DB이므로).
 - 알려진 제한/다음 단계: `selectServiceRequestRepository`가 매 모듈 로드마다 `createClient`를 호출하는 경량 클라이언트 생성 방식이라 서버리스/엣지 런타임에서도 안전하지만, 커넥션 풀링·재시도 정책은 Supabase 클라이언트 기본값을 그대로 따른다(별도 튜닝 없음). `FamilyDashboard.tsx`가 여전히 `/api/service-requests`를 전혀 호출하지 않고 완전히 하드코딩된 배열을 렌더링하는 문제는 이번 단위에서 다루지 않았다 — 우선순위 3(다음 단위)에서 처리한다.
 - 예정 커밋 메시지: `feat: Supabase Postgres 요청 카드 저장소 어댑터 도입`
+
+## 2026-08-25 12:43 — Phase 6c: FamilyDashboard를 실제 요청 카드 API에 연결
+
+- 목표: 사용자 지시("목데이터 금지")에 따라 `FamilyDashboard.tsx`가 여전히 완전히 하드코딩된 배열(요청 1건/위기 알림 1건/미처리 1건, 고정 AI 요약 문구)을 렌더링하던 것을 실제 `GET /api/service-requests` 응답으로 교체한다. `WorkerDashboard`/`SeniorExperience`는 이미 Phase 4에서 실 API에 연결되어 있었고 가족 화면만 예외로 남아 있었다.
+- PRD/TDD 근거: PRD §7.2(부양가족 화면 정보 요구사항 — "AI가 만든 요약에는 반드시 'AI 요약' 표시와 원본 기록 링크", "수집되지 않은 정보는 정상으로 추정하지 않고 '확인되지 않음'으로 표시")·§7.4(가족은 `transcript` 없이 `summary`+상태만), TDD §3.8(카드 렌더링은 세 화면이 하나의 컴포넌트 재사용 원칙 — 이번 단위는 컴포넌트 통합까지는 하지 않고 데이터 소스만 실 API로 교체했다. 컴포넌트 자체 통합은 별도 리팩터 대상으로 남겨둔다).
+- Red:
+  1. `tests/FamilyDashboard.test.tsx`에 새 describe 블록 추가 — `GET /api/service-requests`를 스텁하고 렌더 후 "이번 주 요청" AI 요약이 실제 카드의 `summary`를 반영하는지 검증. 기존 컴포넌트는 이 fetch를 전혀 호출하지 않으므로 `fetchMock`이 `/api/service-requests`로 불리지 않아 Red 확인. 두 번째 테스트는 가족 화면이 카드의 `transcript`를 렌더링하지 않는지 확인(서버가 이미 redact하지만 클라이언트도 원문이 있다고 가정하지 않아야 함).
+- Green:
+  - `components/FamilyDashboard.tsx`: `fetchFamilyRequests()`(GET `/api/service-requests`, `body.data` 배열만 사용하고 `transcript` 필드는 애초에 참조하지 않음), `useFamilyRealtime()`(`PollingRealtimeClient`, Worker/Senior와 동일 패턴), `useServiceRequestList` 훅으로 실 데이터를 가져온다. "최근 7일 변화" 카드는 `createdAt` 기준 7일 이내 카드 수(`weekly.total`)와 `new`/`in_progress` 상태 카드 수(`weekly.unresolved`)를 실제로 계산한다. AI 요약 문구는 최신 카드의 실제 `summary`를 반영하고, 카드가 없으면 "이번 주에 등록된 요청이 없어요"로 정직하게 표시한다("확인되지 않음" 원칙, PRD §7.2). "위기 알림" 카운트는 이번 단위 범위 밖(`emergency_events` API 연동은 별도 과제)이라 기존 고정값 "1건"을 그대로 두었다 — 이는 실제 emergencies 시드 데이터와 일치하는 값이라 거짓 표시는 아니지만, 실 API 연동은 아니므로 "알려진 제한"에 명시한다.
+- Refactor: 없음.
+- 변경 파일: `components/FamilyDashboard.tsx`, `tests/FamilyDashboard.test.tsx`.
+- 검증 명령과 결과:
+  - `npm test -- --run`: 21 test files, 157 tests 통과(기존 155 → 157, FamilyDashboard 2→4).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 18개 라우트 모두 생성 성공(`/family` 2.4kB → 3.52kB, 실 API 연동 코드 증가분).
+- 의사결정: `FamilyDashboard`의 "위기 알림" 섹션(상단 배너, 위기 상세 화면)은 여전히 고정 데모 문구를 쓴다 — 이번 사용자 지시는 명시적으로 "노인 요청 사항을 카드 형태로 저장/조회"하는 파이프라인(우선순위 1~3)에 관한 것이었고, `emergency_events`를 가족 화면이 실제 조회하도록 만드는 것은 별도 범위(TDD Phase 5는 이미 완료됐으나 그 완료 기준은 "PATCH로 감사 로그를 남기는 것"이었지 "가족 화면이 GET으로 실제 목록을 읽는 것"은 아니었다)로 문서화해 두고 이번 단위에서는 손대지 않았다.
+- 알려진 제한/다음 단계: `FamilyDashboard`의 위기 알림 배너/상세는 여전히 고정 데모 문구(`emergency_events`를 실제로 GET하지 않음) — 다음 단위 후보. 세 역할 화면이 "하나의 요청 카드 컴포넌트"를 공유하도록 리팩터하는 TDD §3.8 완료 조건은 아직 충족되지 않았다(`WorkerDashboard`/`SeniorExperience`/`FamilyDashboard`가 각자 카드 렌더링 JSX를 따로 가지고 있음) — 기능적으로는 세 화면 모두 실 데이터를 쓰지만 구조적 중복 제거는 별도 리팩터 과제로 남는다.
+- 예정 커밋 메시지: `feat: FamilyDashboard를 실제 요청 카드 API에 연결`

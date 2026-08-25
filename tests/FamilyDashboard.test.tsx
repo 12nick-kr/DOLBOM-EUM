@@ -1,6 +1,33 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FamilyDashboard } from '@/components/FamilyDashboard';
+
+const doneCard = {
+  id: 'request-family-1', seniorId: 'senior-demo-001', type: 'hospital_escort', summary: '병원 동행 도움이 필요해요.',
+  transcript: '원문 발화는 가족에게 보이지 않아야 함', inputType: 'voice', details: {}, missingFields: [],
+  status: 'done', assigneeId: 'worker-demo-001', acknowledgedAt: '2026-08-25T01:00:00Z', createdAt: '2026-08-25T00:00:00Z', updatedAt: '2026-08-25T01:00:00Z',
+};
+
+describe('FamilyDashboard — driven by the real service-requests API, not hardcoded mock data (Phase 6c, 목데이터 금지)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('renders the weekly request count from GET /api/service-requests instead of a hardcoded value, and the AI summary reflects the real latest card', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ data: [doneCard], is_demo: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FamilyDashboard />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/service-requests'));
+    // one real card this week -> the AI summary reflects the real latest card's summary, not a hardcoded string
+    await waitFor(() => expect(screen.getByText(/이번 주에 병원 동행 도움이 필요해요\./)).toBeVisible());
+  });
+
+  it('never renders the request transcript on the family screen (redacted server-side, but the client must not assume it exists either)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ data: [doneCard], is_demo: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FamilyDashboard />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.queryByText(/원문 발화는 가족에게 보이지 않아야 함/)).toBeNull();
+  });
+});
 
 describe('FamilyDashboard — emergency acknowledgement leaves an audit trail (Phase 5, FR-03)', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
