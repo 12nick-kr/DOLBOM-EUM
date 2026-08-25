@@ -37,3 +37,31 @@
 - 의사결정: Phase 0의 기존 산출물(`.gitignore`, `.env.example`, `lib/config.ts`, `docs/DEVELOPMENT_LOG.md` 최초 항목)은 새 PRD v1.3/TDD 프롬프트 기준을 이미 만족하므로 재작성하지 않고 보존한다. 발견된 유일한 결함(lint)만 최소 수정한다.
 - 알려진 제한/다음 단계: Phase 1(디자인 토큰·역할별 라우트 접근 가드)로 진행한다. `git remote -v`에 `origin`이 이미 설정되어 있음을 확인했으나 이번 작업 범위(Phase 0~5)에서는 push를 수행하지 않는다.
 - 예정 커밋 메시지: `chore: TDD 개발 기반과 비밀정보 보호 설정 점검`
+
+## 2026-08-25 — Phase 1: 디자인 토큰과 역할별 접근 가능한 화면 골격
+
+- 목표: `DESIGN.md` §2 토큰을 `app/globals.css`의 CSS 변수로 이식하고, 밀도 스케일(`data-density="comfort"`)을 구현하며, 역할별 라우트 접근 가드를 강화한다.
+- PRD/설계 요구사항: `DESIGN.md` §2(토큰)·§4(컴포넌트 규칙: 그림자 금지)·§8(하지 말 것), PRD FR-01(다른 역할 경로 직접 접근 차단), TDD 프롬프트 Phase 1 테스트 목록.
+- Red:
+  1. `tests/middleware.test.ts`를 새로 작성해 `demo-role` 쿠키가 없는 세션이 `/worker` 같은 보호 경로에 200으로 접근되는 현재 동작(기대치 307)을 실패로 재현했다. 기존 `middleware.ts`는 쿠키가 있고 **불일치**할 때만 리다이렉트했고, 쿠키가 아예 없을 때는 그대로 통과시켰다 — FR-01 위반.
+  2. `tests/session-route.test.ts`를 작성해 `@/app/api/session/[role]/route`가 존재하지 않아 import 자체가 실패하는 것을 확인했다(역할 선택 시 쿠키를 설정하는 서버 경로가 아예 없었음 — 랜딩 페이지 역할 카드가 순수 `<Link>`였다).
+  3. `tests/SeniorExperience.test.tsx`에 밀도 토큰 검증 케이스를 추가해 `data-density="comfort"`가 렌더 트리에 없는 것을 실패로 확인했다.
+  4. `npm run lint`를 재실행해 `app/globals.css` 리라이트 전 상태(그림자 `box-shadow`, 비토큰 hex/px 값 다수)를 육안 대조로 재확인했다(자동 lint 규칙이 아니라 DESIGN.md §8 수동 대조).
+- Green:
+  - `middleware.ts`: 쿠키가 없으면 `/`로, 있고 불일치하면 해당 역할로 리다이렉트하도록 최소 수정.
+  - `app/api/session/[role]/route.ts` 신설: `roleSchema`로 역할을 검증하고 `httpOnly` `demo-role` 쿠키를 설정한 뒤 해당 역할 화면으로 307 리다이렉트. 잘못된 역할은 400.
+  - `app/page.tsx`의 역할 카드 링크를 `/senior` 등 직접 경로에서 `/api/session/{role}`로 변경.
+  - `e2e/core-flows.spec.ts`의 `page.goto()`를 동일하게 `/api/session/{role}`로 갱신해 이미 통과하던 E2E 흐름이 새 가드에서도 깨지지 않게 했다(Phase 8 범위는 아니지만 회귀 방지를 위해 최소 반영).
+  - `app/globals.css` 전체 재작성: DESIGN.md §2.1의 색 이름(`--blue`, `--blue-strong`, `--blue-bg`, `--red`/`--red-bg`, `--amber`/`--amber-bg`, `--mint`/`--mint-bg`, `--ink`/`--ink-2`/`--ink-3`, `--line`, `--surface`, `--bg`, `--bg-alt`)을 그대로 사용. §2.3의 4배수 간격 스케일(`--space-4`~`--space-48`)과 `--radius-card`/`--radius-control`/`--radius-pill`, `--gap-card`/`--gap-stack`/`--gap-page`를 도입. §2.2의 타이포를 역할 이름(`--text-display`/`--text-title`/`--text-body`/`--text-label`)으로만 참조하도록 통합. §2.4의 밀도 스케일을 `:root[data-density='comfort']`(및 하위 요소 선택자)로 구현해 노인 화면(`SeniorExperience`)의 `<main>`에만 `data-density="comfort"`를 부여했다 — 별도 컴포넌트를 만들지 않고 같은 클래스를 재사용한다.
+  - DESIGN.md §4/§8 규칙에 따라 카드류 선택자(`.card`, `.role-card`, `.request-card` 등)에서 `box-shadow`를 전부 제거하고 1px `--line` 테두리만 남겼다.
+  - `SeniorExperience.tsx`에 `data-density="comfort"` 속성 1곳 추가.
+- Refactor: 색상표를 목업 파생 이름(`--blue-dark`, `--surface`가 회색으로 오용되는 등)에서 DESIGN.md 정의 이름으로 정정하고, 페이지 배경(`--bg`)과 카드 배경(`--surface`)의 의미를 DESIGN.md와 일치시켰다(기존 CSS는 `--surface`를 회색 배경으로, `--page`를 별도로 뒀으나 DESIGN.md는 `--surface`=카드 흰색, `--bg`=페이지 배경, `--bg-alt`=카드 안쪽 블록으로 구분).
+- 변경 파일: `app/globals.css`(전면 재작성), `middleware.ts`, `app/api/session/[role]/route.ts`(신규), `app/page.tsx`, `components/SeniorExperience.tsx`, `e2e/core-flows.spec.ts`, `tests/middleware.test.ts`(신규), `tests/session-route.test.ts`(신규), `tests/SeniorExperience.test.tsx`.
+- 검증 명령과 결과:
+  - `npm test -- --run`: 6 test files, 33 tests 통과(기존 25 + 신규 8).
+  - `npm run typecheck`: 오류 없음.
+  - `npm run lint`: 오류 없음.
+  - `npm run build`: 18개 라우트(신규 `/api/session/[role]` 포함) 모두 생성 성공.
+- 의사결정: `data-density`는 `<html>`이 아니라 노인 화면 루트 `<main>`에 부여했다 — Server Component인 `RootLayout`이 경로별로 `<html>` 속성을 분기하려면 미들웨어 헤더 전달 등 추가 배선이 필요해 3일 MVP 범위에서 과설계로 판단했다. CSS 선택자를 `:root[data-density='comfort'], [data-density='comfort']`로 넓혀 두 방식 모두 지원하므로 향후 `<html>` 방식으로 옮겨도 스타일 변경이 필요 없다.
+- 알려진 제한/다음 단계: `FamilyDashboard`/`WorkerDashboard`는 이번 Phase에서 클래스명을 그대로 유지했고(마크업 자체는 Phase 4에서 실데이터 배선과 함께 다시 손댈 예정), 지금은 토큰화된 CSS 위에서 기존 레이아웃을 그대로 재사용한다. Playwright E2E(`npm run test:e2e`)는 Phase 8 범위라 이번 실행에서는 구동하지 않았다 — dev 서버 기동이 필요해 별도 확인 대상이다. Phase 2로 진행한다.
+- 예정 커밋 메시지: `feat: 디자인 토큰과 역할별 접근 가능한 화면 골격 구현`
