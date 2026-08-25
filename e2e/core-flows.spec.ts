@@ -2,27 +2,27 @@ import { expect, test, type Page } from '@playwright/test';
 import { randomInt } from 'node:crypto';
 
 type Role = 'senior' | 'family' | 'worker';
-const nextPhone = () => `010-0000-${String(randomInt(1, 10_000)).padStart(4, '0')}`;
+const nextLoginId = () => `010-0000-${String(randomInt(1, 10_000)).padStart(4, '0')}`;
 
 async function signup(page: Page, role: Role, displayName: string) {
-  const phone = nextPhone();
-  const response = await page.request.post('/api/auth/signup', { data: { displayName, phone, pin: '123456', pinConfirm: '123456', role } });
+  const loginId = nextLoginId();
+  const response = await page.request.post('/api/auth/signup', { data: { displayName, loginId, pin: '123456', pinConfirm: '123456', role } });
   expect(response.status(), await response.text()).toBe(201);
   await page.goto(`/${role}`);
-  return phone;
+  return loginId;
 }
 
-async function lookupAccount(worker: Page, phone: string) {
-  const response = await worker.request.get(`/api/care-management/accounts?phone=${encodeURIComponent(phone)}`);
+async function lookupAccount(worker: Page, loginId: string) {
+  const response = await worker.request.get(`/api/care-management/accounts?loginId=${encodeURIComponent(loginId)}`);
   expect(response.ok(), await response.text()).toBe(true);
   const body = await response.json() as { profile: { id: string; role: Role } | null };
   expect(body.profile).not.toBeNull();
   return body.profile!;
 }
 
-async function connectCareChain(worker: Page, seniorPhone: string, familyPhone: string) {
-  const senior = await lookupAccount(worker, seniorPhone);
-  const family = await lookupAccount(worker, familyPhone);
+async function connectCareChain(worker: Page, seniorLoginId: string, familyLoginId: string) {
+  const senior = await lookupAccount(worker, seniorLoginId);
+  const family = await lookupAccount(worker, familyLoginId);
   const workerLink = await worker.request.post('/api/care-management/relationships', { data: { relationshipType: 'worker', seniorId: senior.id } });
   expect(workerLink.status(), await workerLink.text()).toBe(201);
   const familyLink = await worker.request.post('/api/care-management/relationships', { data: { relationshipType: 'family', seniorId: senior.id, memberId: family.id } });
@@ -35,7 +35,7 @@ test('first visit shows login and signup creates a role-scoped account without S
   await page.getByRole('link', { name: '회원가입' }).click();
   await page.getByRole('button', { name: /부양가족/ }).click();
   await page.getByLabel('이름').fill('데모 가족');
-  await page.getByLabel('가상 전화번호').fill(nextPhone());
+  await page.getByLabel('전화번호형 아이디').fill(nextLoginId());
   await page.getByLabel('로그인 비밀번호 숫자 6자리').fill('123456');
   await page.getByLabel('비밀번호 확인').fill('123456');
   await page.getByRole('button', { name: '계정 만들기' }).click();
@@ -72,10 +72,10 @@ test('emergency dock keeps the request action visible on a compact senior screen
 test('linked family and worker receive one senior card and worker deletion removes it everywhere', async ({ browser }) => {
   const seniorContext = await browser.newContext(); const familyContext = await browser.newContext(); const workerContext = await browser.newContext();
   const senior = await seniorContext.newPage(); const family = await familyContext.newPage(); const worker = await workerContext.newPage();
-  const seniorPhone = await signup(senior, 'senior', '연결 어르신');
-  const familyPhone = await signup(family, 'family', '연결 가족');
+  const seniorLoginId = await signup(senior, 'senior', '연결 어르신');
+  const familyLoginId = await signup(family, 'family', '연결 가족');
   await signup(worker, 'worker', '연결 복지사');
-  await connectCareChain(worker, seniorPhone, familyPhone);
+  await connectCareChain(worker, seniorLoginId, familyLoginId);
   await Promise.all([family.reload(), worker.reload()]);
   await worker.getByRole('button', { name: /요청 업무함/ }).click();
   await senior.getByLabel('도움 요청 입력').fill('내일 충남대학교병원에 같이 가 주세요.');
@@ -98,10 +98,10 @@ test('linked family and worker receive one senior card and worker deletion remov
 test('assigned worker can hard-delete a linked senior emergency while family remains read-only', async ({ browser }) => {
   const seniorContext = await browser.newContext(); const familyContext = await browser.newContext(); const workerContext = await browser.newContext();
   const senior = await seniorContext.newPage(); const family = await familyContext.newPage(); const worker = await workerContext.newPage();
-  const seniorPhone = await signup(senior, 'senior', '긴급 어르신');
-  const familyPhone = await signup(family, 'family', '긴급 가족');
+  const seniorLoginId = await signup(senior, 'senior', '긴급 어르신');
+  const familyLoginId = await signup(family, 'family', '긴급 가족');
   await signup(worker, 'worker', '긴급 복지사');
-  await connectCareChain(worker, seniorPhone, familyPhone);
+  await connectCareChain(worker, seniorLoginId, familyLoginId);
   const created = await senior.request.post('/api/emergencies', { data: { utterance: '지금 숨쉬기가 힘들어요.', location: '대전', confirmed: true } });
   expect(created.status(), await created.text()).toBe(201);
   await Promise.all([family.reload(), worker.reload()]);

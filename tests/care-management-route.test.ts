@@ -15,13 +15,13 @@ function request(path: string, role: 'senior' | 'family' | 'worker', id: string,
 
 describe('care group management', () => {
   beforeAll(async () => {
-    senior = await createDemoAccount({ phone: '01000009201', pin: '123456', displayName: '연결노인', role: 'senior' });
-    family = await createDemoAccount({ phone: '01000009202', pin: '123456', displayName: '연결가족', role: 'family' });
-    worker = await createDemoAccount({ phone: '01000009203', pin: '123456', displayName: '연결복지사', role: 'worker' });
+    senior = await createDemoAccount({ loginId: '01000009201', pin: '123456', displayName: '연결노인', role: 'senior' });
+    family = await createDemoAccount({ loginId: '01000009202', pin: '123456', displayName: '연결가족', role: 'family' });
+    worker = await createDemoAccount({ loginId: '01000009203', pin: '123456', displayName: '연결복지사', role: 'worker' });
   });
 
-  it('finds an existing synthetic account only by its exact virtual phone', async () => {
-    const response = await searchAccount(request('/api/care-management/accounts?phone=010-0000-9201', 'worker', worker.id));
+  it('finds an existing synthetic account only by its exact login id', async () => {
+    const response = await searchAccount(request('/api/care-management/accounts?loginId=010-0000-9201', 'worker', worker.id));
     expect(response.status).toBe(200);
     expect((await response.json()).profile).toMatchObject({ id: senior.id, role: 'senior' });
   });

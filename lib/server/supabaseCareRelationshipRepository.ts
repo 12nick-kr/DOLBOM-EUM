@@ -1,23 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CareGroupSummary, CareProfile, CareRelationship, CareRelationshipRepository } from './careRelationshipRepository';
 
-type ProfileRow = { id: string; role: 'senior' | 'family' | 'worker'; display_name: string; phone_alias: string | null };
+type ProfileRow = { id: string; role: 'senior' | 'family' | 'worker'; display_name: string; login_id: string | null };
 type RelationshipRow = { senior_id: string; member_id: string; relationship_type: 'family' | 'worker'; status: 'active' | 'revoked'; linked_by: string | null; starts_at: string; ends_at: string | null };
 
-const mapProfile = (row: ProfileRow): CareProfile => ({ id: row.id, role: row.role, displayName: row.display_name, phone: row.phone_alias });
+const mapProfile = (row: ProfileRow): CareProfile => ({ id: row.id, role: row.role, displayName: row.display_name, loginId: row.login_id });
 const mapRelationship = (row: RelationshipRow): CareRelationship => ({ seniorId: row.senior_id, memberId: row.member_id, relationshipType: row.relationship_type, status: row.status, linkedBy: row.linked_by ?? row.member_id, createdAt: row.starts_at, endsAt: row.ends_at });
 
 export class SupabaseCareRelationshipRepository implements CareRelationshipRepository {
   constructor(private client: SupabaseClient) {}
 
-  async findProfileByPhone(phone: string) {
-    const { data, error } = await this.client.from('profiles').select('id, role, display_name, phone_alias').eq('phone_alias', phone).maybeSingle();
+  async findProfileByLoginId(loginId: string) {
+    const { data, error } = await this.client.from('profiles').select('id, role, display_name, login_id').eq('login_id', loginId).maybeSingle();
     if (error) throw new Error(error.message);
     return data ? mapProfile(data as ProfileRow) : undefined;
   }
 
   async getProfile(id: string) {
-    const { data, error } = await this.client.from('profiles').select('id, role, display_name, phone_alias').eq('id', id).maybeSingle();
+    const { data, error } = await this.client.from('profiles').select('id, role, display_name, login_id').eq('id', id).maybeSingle();
     if (error) throw new Error(error.message);
     return data ? mapProfile(data as ProfileRow) : undefined;
   }

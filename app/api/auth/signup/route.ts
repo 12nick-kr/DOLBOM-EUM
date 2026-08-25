@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
           role,
           display_name: displayName,
           login_id: loginId,
-          phone_alias: loginId,
           account_status: 'active',
         });
         if (profileError) throw new Error(profileError.message);
@@ -51,7 +50,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const account = await createDemoAccount({ displayName, phone: loginId, pin, role });
+    const account = await createDemoAccount({ displayName, loginId, pin, role });
     const token = await signDemoSession({ sub: account.id, role: account.role, displayName: account.displayName });
     const response = NextResponse.json({ redirectTo: `/${role}` }, { status: 201 });
     response.cookies.set(demoSessionCookie, token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 12 });

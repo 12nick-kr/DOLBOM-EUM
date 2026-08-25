@@ -2,7 +2,7 @@ import type { Role } from '@/lib/domain/types';
 import { getDemoAccountById, listDemoAccounts } from './accountStore';
 import { demoFamilyId, demoSeniorId, demoWorkerId } from './storeIds';
 
-export type CareProfile = { id: string; role: Role; displayName: string; phone: string | null };
+export type CareProfile = { id: string; role: Role; displayName: string; loginId: string | null };
 export type CareRelationship = {
   seniorId: string;
   memberId: string;
@@ -15,7 +15,7 @@ export type CareRelationship = {
 export type CareGroupSummary = { id: string; senior: CareProfile; workers: CareProfile[]; family: CareProfile[] };
 
 export interface CareRelationshipRepository {
-  findProfileByPhone(phone: string): Promise<CareProfile | undefined>;
+  findProfileByLoginId(loginId: string): Promise<CareProfile | undefined>;
   getProfile(id: string): Promise<CareProfile | undefined>;
   seniorIdsForMember(memberId: string, relationshipType?: 'family' | 'worker'): Promise<string[]>;
   groupsForWorker(workerId: string): Promise<CareGroupSummary[]>;
@@ -24,9 +24,9 @@ export interface CareRelationshipRepository {
 }
 
 const seededProfiles: CareProfile[] = [
-  { id: demoSeniorId, role: 'senior', displayName: '김순자', phone: '01000000001' },
-  { id: demoFamilyId, role: 'family', displayName: '이지현', phone: '01000000002' },
-  { id: demoWorkerId, role: 'worker', displayName: '박사회복지사', phone: '01000000003' },
+  { id: demoSeniorId, role: 'senior', displayName: '김순자', loginId: '01000000001' },
+  { id: demoFamilyId, role: 'family', displayName: '이지현', loginId: '01000000002' },
+  { id: demoWorkerId, role: 'worker', displayName: '박사회복지사', loginId: '01000000003' },
 ];
 
 type CareRuntime = typeof globalThis & {
@@ -49,18 +49,18 @@ export class InMemoryCareRelationshipRepository implements CareRelationshipRepos
     runtime.__dolbomCareGroupIds = this.groupIds;
   }
 
-  async findProfileByPhone(phone: string) {
-    const profile = seededProfiles.find((item) => item.phone === phone);
+  async findProfileByLoginId(loginId: string) {
+    const profile = seededProfiles.find((item) => item.loginId === loginId);
     if (profile) return profile;
-    const account = listDemoAccounts().find((item) => item.phone === phone);
-    return account ? { id: account.id, role: account.role, displayName: account.displayName, phone: account.phone } : undefined;
+    const account = listDemoAccounts().find((item) => item.loginId === loginId);
+    return account ? { id: account.id, role: account.role, displayName: account.displayName, loginId: account.loginId } : undefined;
   }
 
   async getProfile(id: string) {
     const profile = seededProfiles.find((item) => item.id === id);
     if (profile) return profile;
     const account = getDemoAccountById(id);
-    return account ? { id: account.id, role: account.role, displayName: account.displayName, phone: account.phone } : undefined;
+    return account ? { id: account.id, role: account.role, displayName: account.displayName, loginId: account.loginId } : undefined;
   }
 
   async seniorIdsForMember(memberId: string, relationshipType?: 'family' | 'worker') {
