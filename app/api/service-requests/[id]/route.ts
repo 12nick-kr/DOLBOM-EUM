@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { persistedRequestStatusSchema } from '@/lib/domain/types';
 import { authenticatedActor } from '@/lib/server/auth';
 import { careRelationships, seniorInputs, serviceRequests } from '@/lib/server/store';
 
 const patchSchema = z.object({
-  status: persistedRequestStatusSchema,
+  status: z.literal('in_progress'),
   memo: z.string().max(500).optional(),
 });
 

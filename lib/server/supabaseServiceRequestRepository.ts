@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { canCancelRequest, canTransitionRequest } from '@/lib/domain/policies';
 import type { PersistedRequestStatus, RequestDetails, Role, ServiceRequest } from '@/lib/domain/types';
 import type { CreateServiceRequestInput, ServiceRequestRepository } from './serviceRequestRepository';
+import { serviceDateFor } from '@/lib/domain/requestSchedule';
 
 const TABLE = 'service_requests';
 
@@ -20,6 +21,10 @@ type ServiceRequestRow = {
   assignee_id: string | null;
   acknowledged_at: string | null;
   due_at: string | null;
+  service_date?: string | null;
+  schedule_timezone?: 'Asia/Seoul' | null;
+  completed_at?: string | null;
+  completed_by?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -40,6 +45,10 @@ export function mapRowToServiceRequest(row: ServiceRequestRow): ServiceRequest {
     assigneeId: row.assignee_id,
     acknowledgedAt: row.acknowledged_at,
     dueAt: row.due_at ?? undefined,
+    serviceDate: row.service_date ?? null,
+    scheduleTimezone: row.schedule_timezone ?? 'Asia/Seoul',
+    completedAt: row.completed_at ?? null,
+    completedBy: row.completed_by ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -58,6 +67,8 @@ export function mapCreateInputToRow(input: CreateServiceRequestInput): Record<st
     missing_fields: input.missingFields,
     status: 'new',
     due_at: input.dueAt ?? null,
+    service_date: input.serviceDate ?? serviceDateFor(input.details, input.dueAt),
+    schedule_timezone: 'Asia/Seoul',
     idempotency_key: input.idempotencyKey,
   };
 }
@@ -138,6 +149,9 @@ export class SupabaseServiceRequestRepository implements ServiceRequestRepositor
     const { data, error } = await this.client.from(TABLE).update(updates).eq('id', id).select().single();
     if (error) throw new Error(`service_requests 상태 변경 실패: ${error.message}`);
     const updated = mapRowToServiceRequest(data as ServiceRequestRow);
+    if (to === 'in_progress' && opts?.assigneeId) {
+      await this.client.from('audit_logs').insert({ actor_id: opts.assigneeId, action: 'service_request.assigned', resource_type: 'service_request', resource_id: id, reason: '담당 맡기 버튼' });
+    }
     this.emit({ type: 'update', request: updated });
     return updated;
   }
@@ -150,6 +164,18 @@ export class SupabaseServiceRequestRepository implements ServiceRequestRepositor
     if (!existing.assigneeId) updates.assignee_id = workerId;
     const { data, error } = await this.client.from(TABLE).update(updates).eq('id', id).select().single();
     if (error) throw new Error(`service_requests 확인 처리 실패: ${error.message}`);
+    const updated = mapRowToServiceRequest(data as ServiceRequestRow);
+    this.emit({ type: 'update', request: updated });
+    return updated;
+  }
+
+  async complete(id: string, workerId: string): Promise<ServiceRequest> {
+    const existing = await this.get(id);
+    if (!existing || existing.status !== 'in_progress' || existing.assigneeId !== workerId) throw new Error('담당 중인 요청만 완료할 수 있습니다.');
+    const now = new Date().toISOString();
+    const { data, error } = await this.client.from(TABLE).update({ status: 'done', completed_at: now, completed_by: workerId, updated_at: now }).eq('id', id).eq('status', 'in_progress').eq('assignee_id', workerId).select().single();
+    if (error) throw new Error(`service_requests 완료 처리 실패: ${error.message}`);
+    await this.client.from('audit_logs').insert({ actor_id: workerId, action: 'service_request.completed', resource_type: 'service_request', resource_id: id, reason: '담당 사회복지사 완료 버튼' });
     const updated = mapRowToServiceRequest(data as ServiceRequestRow);
     this.emit({ type: 'update', request: updated });
     return updated;

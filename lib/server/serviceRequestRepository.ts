@@ -1,5 +1,6 @@
 import { canCancelRequest, canTransitionRequest } from '@/lib/domain/policies';
 import type { PersistedRequestStatus, RequestDetails, RequestInputType, RequestType, Role, ServiceRequest } from '@/lib/domain/types';
+import { serviceDateFor } from '@/lib/domain/requestSchedule';
 
 export type CreateServiceRequestInput = {
   seniorId: string;
@@ -12,6 +13,7 @@ export type CreateServiceRequestInput = {
   missingFields: string[];
   idempotencyKey: string;
   dueAt?: string;
+  serviceDate?: string | null;
 };
 
 /**
@@ -28,6 +30,7 @@ export interface ServiceRequestRepository {
   get(id: string): Promise<ServiceRequest | undefined>;
   create(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   transition(id: string, to: PersistedRequestStatus, opts?: { assigneeId?: string }): Promise<ServiceRequest>;
+  complete(id: string, workerId: string): Promise<ServiceRequest>;
   acknowledge(id: string, workerId: string): Promise<ServiceRequest>;
   cancel(id: string, actor: Role): Promise<ServiceRequest>;
   delete(id: string, actorId: string): Promise<ServiceRequest>;
@@ -91,6 +94,10 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
       assigneeId: null,
       acknowledgedAt: null,
       dueAt: input.dueAt,
+      serviceDate: input.serviceDate ?? serviceDateFor(input.details, input.dueAt),
+      scheduleTimezone: 'Asia/Seoul',
+      completedAt: null,
+      completedBy: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -117,6 +124,19 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     if (!row.acknowledgedAt) row.acknowledgedAt = new Date().toISOString();
     if (!row.assigneeId) row.assigneeId = workerId;
     row.updatedAt = new Date().toISOString();
+    this.emit({ type: 'update', request: row });
+    return row;
+  }
+
+  async complete(id: string, workerId: string): Promise<ServiceRequest> {
+    const row = this.rows.find((item) => item.id === id);
+    if (!row) throw new Error('요청을 찾을 수 없습니다.');
+    if (row.status !== 'in_progress' || row.assigneeId !== workerId) throw new Error('담당 중인 요청만 완료할 수 있습니다.');
+    const now = new Date().toISOString();
+    row.status = 'done';
+    row.completedAt = now;
+    row.completedBy = workerId;
+    row.updatedAt = now;
     this.emit({ type: 'update', request: row });
     return row;
   }

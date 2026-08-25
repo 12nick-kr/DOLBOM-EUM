@@ -52,4 +52,21 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     await waitFor(() => expect(screen.queryByText(seedCard.summary)).toBeNull());
     expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${seedCard.id}`, { method: 'DELETE' });
   });
+
+  it('shows the complete action only for in-progress cards and calls the dedicated endpoint', async () => {
+    const inProgress = { ...seedCard, status: 'in_progress', assigneeId: 'worker-demo-001' };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [inProgress] }) };
+      if (url === '/api/emergencies') return { ok: true, json: async () => ({ data: [] }) };
+      if (String(url).endsWith('/complete') && init?.method === 'POST') return { ok: true, json: async () => ({ ...inProgress, status: 'done', completedAt: new Date().toISOString() }) };
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<WorkerDashboard />);
+    fireEvent.click(screen.getByRole('button', { name: /요청 업무함/ }));
+    await screen.findByText(inProgress.summary);
+    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '처리 완료' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/service-requests/${inProgress.id}/complete`, { method: 'POST' }));
+  });
 });

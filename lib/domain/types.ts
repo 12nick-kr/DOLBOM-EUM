@@ -98,6 +98,10 @@ export const serviceRequestSchema = z.object({
   assigneeId: z.string().nullable(),
   acknowledgedAt: z.string().nullable(),
   dueAt: z.string().optional(),
+  serviceDate: z.string().date().nullable().optional(),
+  scheduleTimezone: z.literal('Asia/Seoul').optional(),
+  completedAt: z.string().nullable().optional(),
+  completedBy: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

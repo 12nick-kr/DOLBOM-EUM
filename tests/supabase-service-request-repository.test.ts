@@ -15,6 +15,10 @@ const sampleRow = {
   assignee_id: null as string | null,
   acknowledged_at: null as string | null,
   due_at: '2026-09-01T10:00:00+09:00' as string | null,
+  service_date: '2026-09-01',
+  schedule_timezone: 'Asia/Seoul' as const,
+  completed_at: null as string | null,
+  completed_by: null as string | null,
   created_at: '2026-08-25T00:00:00Z',
   updated_at: '2026-08-25T00:00:00Z',
 };
@@ -36,6 +40,10 @@ describe('mapRowToServiceRequest — Postgres row -> domain ServiceRequest (PRD 
       assigneeId: null,
       acknowledgedAt: null,
       dueAt: '2026-09-01T10:00:00+09:00',
+      serviceDate: '2026-09-01',
+      scheduleTimezone: 'Asia/Seoul',
+      completedAt: null,
+      completedBy: null,
       createdAt: '2026-08-25T00:00:00Z',
       updatedAt: '2026-08-25T00:00:00Z',
     });
