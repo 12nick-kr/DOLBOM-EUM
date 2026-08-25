@@ -52,15 +52,36 @@ describe('PollingRealtimeClient — runtime bridge without a live Supabase conne
     client.dispose();
   });
 
+  it('첫 조회가 성공하기 전에는 연결됨으로 보고하지 않는다', async () => {
+    // 서버가 죽어 있어도 최초 1초 동안 "연결됨"으로 보이던 문제 — 낙관적 초기값이 원인이었다.
+    const client = new PollingRealtimeClient(vi.fn().mockRejectedValue(new Error('network')), 1000);
+    expect(client.connectionState()).toBe('disconnected');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.connectionState()).toBe('disconnected');
+    client.dispose();
+  });
+
+  it('첫 조회가 성공하면 연결됨으로 승격한다', async () => {
+    const client = new PollingRealtimeClient(vi.fn().mockResolvedValue([card({ id: 'r1' })]), 1000);
+    const states: string[] = [];
+    client.onConnectionChange((s) => states.push(s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(states).toEqual(['connected']);
+    expect(client.connectionState()).toBe('connected');
+    client.dispose();
+  });
+
   it('reports disconnected when the poll fails and connected again once it recovers', async () => {
     const fetchList = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce([card({ id: 'r1' })]);
     const client = new PollingRealtimeClient(fetchList, 1000);
     const states: string[] = [];
     client.onConnectionChange((s) => states.push(s));
     await vi.advanceTimersByTimeAsync(0);
-    expect(states).toEqual(['disconnected']);
+    // 이미 disconnected로 출발하므로 첫 실패는 상태 변화가 아니다 — 알림도 나가지 않는다.
+    expect(states).toEqual([]);
+    expect(client.connectionState()).toBe('disconnected');
     await vi.advanceTimersByTimeAsync(1000);
-    expect(states).toEqual(['disconnected', 'connected']);
+    expect(states).toEqual(['connected']);
     client.dispose();
   });
 });
