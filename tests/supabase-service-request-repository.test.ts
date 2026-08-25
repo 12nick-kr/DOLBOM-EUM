@@ -25,6 +25,7 @@ describe('mapRowToServiceRequest — Postgres row -> domain ServiceRequest (PRD 
     expect(mapped).toEqual<ServiceRequest>({
       id: 'row-1',
       seniorId: 'senior-demo-001',
+      sourceEventId: null,
       type: 'hospital_escort',
       summary: '병원 동행 도움이 필요해요.',
       transcript: '다음 주 화요일 병원에 같이 갈 사람이 필요해요.',

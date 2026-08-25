@@ -17,7 +17,7 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     render(<WorkerDashboard />);
     fireEvent.click(screen.getByRole('button', { name: /요청 업무함/ }));
     await waitFor(() => expect(screen.getByText('병원 동행 도움이 필요해요.')).toBeVisible());
-    expect(fetchMock).toHaveBeenCalledWith('/api/service-requests');
+    expect(fetchMock).toHaveBeenCalledWith('/api/care-cards');
   });
 
   it('adds a newly confirmed senior request to the inbox without a page reload when the poller detects it', async () => {

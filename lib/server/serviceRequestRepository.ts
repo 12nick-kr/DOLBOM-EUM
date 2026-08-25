@@ -3,6 +3,7 @@ import type { PersistedRequestStatus, RequestDetails, RequestInputType, RequestT
 
 export type CreateServiceRequestInput = {
   seniorId: string;
+  sourceEventId?: string;
   type: RequestType;
   summary: string;
   transcript: string;
@@ -78,6 +79,7 @@ export class InMemoryServiceRequestRepository implements ServiceRequestRepositor
     const created: ServiceRequest = {
       id: this.nextId(),
       seniorId: input.seniorId,
+      sourceEventId: input.sourceEventId ?? null,
       type: input.type,
       summary: input.summary,
       transcript: input.transcript,

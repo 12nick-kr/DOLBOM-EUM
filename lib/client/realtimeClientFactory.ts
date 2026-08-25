@@ -2,6 +2,8 @@
 import type { ServiceRequest } from '@/lib/domain/types';
 import type { RealtimeClientPort } from './realtimePort';
 import { PollingRealtimeClient } from './pollingRealtimeClient';
+import { SupabaseRealtimeClient } from './supabaseRealtimeClient';
+import { ResilientRealtimeClient } from './resilientRealtimeClient';
 
 /**
  * 요청 카드 실시간 클라이언트 선택 단일 결정 지점. 현재는 폴링 클라이언트만 쓴다.
@@ -16,5 +18,7 @@ import { PollingRealtimeClient } from './pollingRealtimeClient';
  * 그대로 쓴다 — PRD §11.4 "실시간은 최적화이고 정본은 항상 서버 조회다"를 그대로 만족한다.
  */
 export function createRealtimeClient(fetchList: () => Promise<ServiceRequest[]>): RealtimeClientPort {
-  return new PollingRealtimeClient(fetchList);
+  const fallback = new PollingRealtimeClient(fetchList);
+  const primary = SupabaseRealtimeClient.fromEnvironment(fetchList);
+  return new ResilientRealtimeClient(primary, fallback);
 }

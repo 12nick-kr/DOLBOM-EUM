@@ -7,10 +7,10 @@ import { SeniorExperience } from '@/components/SeniorExperience';
 function stubFetch(handlers: { respond?: unknown[]; myRequests?: unknown[] } = {}) {
   const respondQueue = [...(handlers.respond ?? [])];
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/service-requests' && (!init || init.method === undefined)) {
+    if (url === '/api/care-cards' && (!init || init.method === undefined)) {
       return { json: async () => ({ data: handlers.myRequests ?? [], is_demo: true }) };
     }
-    if (url === '/api/service-requests') {
+    if (url === '/api/senior-inputs') {
       return { ok: true, json: async () => ({ id: 'request-new-1', status: 'new' }) };
     }
     if (url === '/api/emergencies') {
@@ -104,7 +104,7 @@ describe('senior accessible entry', () => {
     // Confirming must call the service-requests endpoint with a confirmed:true idempotency-keyed payload.
     fireEvent.click(screen.getByRole('button', { name: '보내주세요' }));
     await screen.findByText('내 요청 보기');
-    const confirmCall = fetchMock.mock.calls.find((call) => call[0] === '/api/service-requests' && call[1]?.method === 'POST');
+    const confirmCall = fetchMock.mock.calls.find((call) => call[0] === '/api/senior-inputs' && call[1]?.method === 'POST');
     expect(confirmCall).toBeDefined();
     const body = JSON.parse(String(confirmCall![1]!.body));
     expect(body.confirmed).toBe(true);

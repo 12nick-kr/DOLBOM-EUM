@@ -349,7 +349,7 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 .worker-columns, .case-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-16); }
 .worker-columns .card, .case-grid .card, .worker-content > .card { padding: var(--gap-card); margin: 0; }
 
-.bar-chart { height: 150px; display: flex; align-items: end; gap: var(--space-8); padding: var(--space-16) var(--space-4) 0; }
+.bar-chart { height: 150px; display: flex; align-items: flex-end; gap: var(--space-8); padding: var(--space-16) var(--space-4) 0; }
 .bar-chart i { flex: 1; background: var(--blue); border-radius: var(--space-4) var(--space-4) 0 0; }
 .bar-chart + small { font: var(--text-label); font-size: 11px; color: var(--ink-3); word-spacing: 15px; }
 .worker-columns ol { padding-left: var(--space-24); line-height: 2; font: var(--text-body); font-size: 14px; }
@@ -364,6 +364,26 @@ h1, h2, p, dl, dt, dd, blockquote { margin: 0; }
 .inbox-card { display: grid; text-align: left; width: 100%; padding: var(--gap-card); gap: var(--space-8); }
 .inbox-card p, .inbox-card span { color: var(--ink-2); font: var(--text-body); font-size: 14px; }
 .inbox-card.unread { border-color: var(--blue); }
+
+/* 세 역할 공통 요청 카드 — 구조와 간격은 같고 data-density 토큰만 역할에 따라 달라진다. */
+.care-request-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: var(--gap-card);
+  display: grid;
+  gap: var(--space-12);
+}
+.care-request-card.unread { border-color: var(--blue); }
+.care-card-heading { display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
+.care-card-summary { display: flex; align-items: center; gap: var(--space-8); font: var(--text-title); }
+.care-card-meta { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: var(--space-8) var(--space-12); margin: 0; }
+.care-card-meta dt { color: var(--ink-3); font: var(--text-label); }
+.care-card-meta dd { margin: 0; color: var(--ink-2); font: var(--text-body); font-size: 14px; overflow-wrap: anywhere; }
+.care-card-status { margin: 0; color: var(--ink-2); font: var(--text-body); }
+.care-card-actions { display: flex; gap: var(--space-8); flex-wrap: wrap; }
+.care-card-actions > * { min-height: var(--touch-min); padding: var(--space-8) var(--space-16); }
+.care-card-feed { display: grid; gap: var(--gap-stack); }
 
 .case-header { padding: var(--space-16); display: flex; gap: var(--space-16); align-items: center; }
 .case-header .profile { width: 56px; height: 56px; font-size: 22px; }

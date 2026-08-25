@@ -9,6 +9,7 @@ const TABLE = 'service_requests';
 type ServiceRequestRow = {
   id: string;
   senior_id: string;
+  source_event_id?: string | null;
   type: ServiceRequest['type'];
   summary: string;
   transcript: string;
@@ -28,6 +29,7 @@ export function mapRowToServiceRequest(row: ServiceRequestRow): ServiceRequest {
   return {
     id: row.id,
     seniorId: row.senior_id,
+    sourceEventId: row.source_event_id ?? null,
     type: row.type,
     summary: row.summary,
     transcript: row.transcript,
@@ -47,6 +49,7 @@ export function mapRowToServiceRequest(row: ServiceRequestRow): ServiceRequest {
 export function mapCreateInputToRow(input: CreateServiceRequestInput): Record<string, unknown> {
   return {
     senior_id: input.seniorId,
+    source_event_id: input.sourceEventId ?? null,
     type: input.type,
     summary: input.summary,
     transcript: input.transcript,

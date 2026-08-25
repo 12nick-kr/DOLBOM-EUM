@@ -26,7 +26,7 @@ describe('POST /api/emergencies requires explicit confirmation (PRD §10.3 고�
 describe('PATCH /api/emergencies/:id appends an audited action for every status change (FR-03)', () => {
   it('records actor, action, and timestamp for a family acknowledgement', async () => {
     const { PATCH } = await import('@/app/api/emergencies/[id]/route');
-    const req = new NextRequest('http://localhost:3000/api/emergencies/emergency-demo-001', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actor: 'family', status: 'family_acknowledged', action: '가족이 확인했어요.' }) });
+    const req = new NextRequest('http://localhost:3000/api/emergencies/emergency-demo-001', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-demo-role': 'family' }, body: JSON.stringify({ actor: 'family', status: 'family_acknowledged', action: '가족이 확인했어요.' }) });
     const res = await PATCH(req, { params: Promise.resolve({ id: 'emergency-demo-001' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -39,7 +39,7 @@ describe('PATCH /api/emergencies/:id appends an audited action for every status 
 
   it('returns 404 for an unknown emergency id instead of silently succeeding', async () => {
     const { PATCH } = await import('@/app/api/emergencies/[id]/route');
-    const req = new NextRequest('http://localhost:3000/api/emergencies/does-not-exist', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actor: 'worker', status: 'worker_followup', action: 'x' }) });
+    const req = new NextRequest('http://localhost:3000/api/emergencies/does-not-exist', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-demo-role': 'worker' }, body: JSON.stringify({ actor: 'worker', status: 'worker_followup', action: 'x' }) });
     const res = await PATCH(req, { params: Promise.resolve({ id: 'does-not-exist' }) });
     expect(res.status).toBe(404);
   });

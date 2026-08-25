@@ -40,6 +40,31 @@ export type RequestType = z.infer<typeof requestTypeSchema>;
 export const requestInputTypeSchema = z.enum(['voice', 'text']);
 export type RequestInputType = z.infer<typeof requestInputTypeSchema>;
 
+/** 노인이 확인한 입력을 서버에 남기는 append-only JSON 계약. 부분 전사·초안은 이 계약에 들어오지 않는다. */
+export const seniorInputCategorySchema = z.enum(['daily', 'service_request', 'health_caution', 'emergency']);
+export type SeniorInputCategory = z.infer<typeof seniorInputCategorySchema>;
+export const inputVisibilitySchema = z.object({
+  family: z.enum(['summary_only', 'none']),
+  worker: z.enum(['full', 'summary_only']),
+});
+export type InputVisibility = z.infer<typeof inputVisibilitySchema>;
+export const seniorInputEventSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().min(1),
+  seniorId: z.string().min(1),
+  source: requestInputTypeSchema,
+  transcript: z.string().min(1),
+  category: seniorInputCategorySchema,
+  urgency: urgencySchema,
+  summary: z.string().min(1),
+  serviceRequestId: z.string().nullable(),
+  emergencyEventId: z.string().nullable().optional(),
+  visibility: inputVisibilitySchema,
+  confirmedAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+});
+export type SeniorInputEvent = z.infer<typeof seniorInputEventSchema>;
+
 /** 구조화된 요청 상세 필드 — 희망 일시, 목적지, 이동 지원 필요 여부 등 (PRD §7.1, §7.4). */
 export const requestDetailsSchema = z.object({
   destination: z.string().optional(),
@@ -55,6 +80,7 @@ export type RequestDetails = z.infer<typeof requestDetailsSchema>;
 export const serviceRequestSchema = z.object({
   id: z.string(),
   seniorId: z.string(),
+  sourceEventId: z.string().nullable().optional(),
   type: requestTypeSchema,
   summary: z.string().min(1),
   transcript: z.string(),

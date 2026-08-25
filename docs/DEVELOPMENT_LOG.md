@@ -355,3 +355,23 @@
 - 의사결정: 이 실패는 "실시간을 만들 수 없다"가 아니라 "이 특정 접근(프로세스 메모리 pub/sub)으로는 안 된다"는 것이다. 다음 시도가 있다면 Supabase Realtime 클라이언트를 서버 프로세스에서 직접 구독하는 방식(브로커가 Postgres 자체이므로 라우트별 모듈 인스턴스 문제와 무관)이 유력한 후보이며, `service_requests` 테이블이 Supabase publication에 포함되어 있는지 먼저 확인이 필요하다.
 - 알려진 제한/다음 단계: 요청 카드 실시간 동기화는 여전히 3초 폴링이다. 진짜 push 기반 실시간(Supabase Realtime 서버 구독)은 다음 세션 과제로 남긴다.
 - 예정 커밋 메시지: `refactor: SSE 실시간 시도를 폴링으로 되돌리고 dispose 누수 수정`
+## 2026-08-25 — 확인 입력 JSON 정본과 역할 공통 카드 수직 흐름 구현
+
+- 목표: Realtime 음성 전사 단계는 제외하고, 노인이 확인한 음성/텍스트 입력을 서버 JSON 정본으로 저장한 뒤 가족·복지사가 같은 요청 카드를 읽고 처리 상태를 되돌려 받는 흐름을 완성한다.
+- Red: `senior-input-domain`, `senior-input-repository`, `senior-inputs-route`, `CareRequestCard`, `care-cards-route` 테스트를 먼저 추가했다. 초기 실행은 계약·저장소·API·컴포넌트 부재로 실패했다.
+- Green:
+  - `senior_input_events` v1 계약과 Supabase migration `0003_senior_input_events.sql` 추가. 실제 `.json` 파일 대신 검색 컬럼 + JSONB `visibility`를 사용하며 `service_requests.source_event_id`로 연결한다.
+  - `POST/GET /api/senior-inputs` 추가. senior ID는 요청 body가 아니라 인증 행위자에서 결정하고, 확인 플래그·idempotency key를 강제한다. 일반 안부·서비스 요청·긴급 입력을 같은 계약으로 저장한다.
+  - 음성 확인 뒤 `inputType: text`로 바뀌던 결함을 수정하고, 서비스 요청 확정은 기존 `/api/service-requests` 직접 생성 대신 통합 입력 API를 사용하도록 변경했다.
+  - `GET /api/care-cards`에 역할별 redaction, 상태 필터, cursor/limit 계약을 추가했다. 가족에게 요청 원문을 반환하지 않는다.
+  - 세 화면이 `CareRequestCard` 한 컴포넌트를 재사용하도록 교체했다. 가족은 다중 카드 피드, 복지사는 요청 업무함·사례 화면, 노인은 쉬운 상태 문구로 렌더링한다.
+  - `SupabaseRealtimeClient`와 `ResilientRealtimeClient`를 추가했다. Supabase Auth 세션이 있으면 사용자 JWT로 `postgres_changes`를 구독하고, 화면 반영 시 서버 카드 피드를 재조회해 RLS/redaction 범위를 보존한다. 3초 폴링은 장애 폴백과 정본 재동기화로 유지한다.
+  - 긴급 이벤트를 `EmergencyRepository` 포트로 이동해 자격증명 존재 시 `emergency_events`와 `audit_logs`에 영속화한다. 가족·복지사 긴급 현황은 GET API 데이터로 표시하며 고정 emergency ID를 제거했다.
+  - Next 개발 서버 route 번들마다 인메모리 포트가 복제되는 현상을 E2E에서 발견해, 로컬 런타임 포트를 `globalThis`에 고정했다. 다중 인스턴스 운영 정본은 이 공유가 아니라 Supabase다.
+- 디자인: `DESIGN.md`의 1px 테두리, 무그림자 카드, 토큰 간격, 역할별 density 규칙을 공통 카드에 적용했다.
+- 검증:
+  - `npm test -- --run`: 28개 파일, 174개 테스트 통과.
+  - `npm run typecheck`, `npm run lint`: 통과.
+  - `npm run build`: 20개 정적/동적 경로 생성 통과. 오래된 `.next` 캐시에서 한 번 PageNotFound가 발생해 캐시를 격리한 뒤 클린 빌드 통과.
+  - 외부 자격증명을 비운 로컬 어댑터로 `npm run test:e2e`: 4개 통과. 노인→가족·복지사 카드 공유→복지사 상태 변경→노인 상태 반영을 서로 다른 브라우저 컨텍스트로 검증했다.
+- 외부 변경: 실제 Supabase migration은 실행하지 않았다. 운영 반영 전 소유자가 `0003_senior_input_events.sql`을 적용하고 Realtime publication 및 Auth/RLS 세션을 검증해야 한다.

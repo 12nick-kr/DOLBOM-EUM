@@ -2,21 +2,20 @@
 import { useEffect, useState } from 'react';
 import { SpeechControls } from './SpeechControls';
 import { DemoBadge } from './DemoBadge';
-import { StatusPill } from './StatusPill';
-import { statusLabelFor } from '@/lib/domain/policies';
 import type { ServiceRequest, ServiceRequestDraft } from '@/lib/domain/types';
 import { useServiceRequestList } from '@/lib/client/useServiceRequestList';
 import { createRealtimeClient } from '@/lib/client/realtimeClientFactory';
 import type { RealtimeClientPort } from '@/lib/client/realtimePort';
+import { CareRequestCard } from './CareRequestCard';
 
 type Step = 'home' | 'listening' | 'confirm' | 'answer' | 'request' | 'emergency' | 'requests' | 'companion' | 'sent';
 
 const typeLabel: Record<string, string> = { hospital_escort: '병원 동행 요청', welfare_info: '복지 정보 안내', daily_help: '일상 도움 요청' };
 
 async function fetchMyRequests(): Promise<ServiceRequest[]> {
-  const res = await fetch('/api/service-requests');
+  const res = await fetch('/api/care-cards');
   const body = await res.json();
-  return body.data as ServiceRequest[];
+  return Array.isArray(body.data) ? body.data as ServiceRequest[] : [];
 }
 
 function useSeniorRealtime(): RealtimeClientPort {
@@ -34,21 +33,37 @@ export function SeniorExperience() {
   const [draft, setDraft] = useState<ServiceRequestDraft | null>(null);
   const [callConfirmed, setCallConfirmed] = useState(false);
   const [notified, setNotified] = useState<{ family: boolean; worker: boolean }>({ family: false, worker: false });
+  const [activeEmergencyId, setActiveEmergencyId] = useState<string | null>(null);
   const realtime = useSeniorRealtime();
   const { requests: myRequests, refetch: refetchMyRequests } = useServiceRequestList({ realtime, fetchList: fetchMyRequests });
 
-  const ask = async (text: string, priorDraft?: ServiceRequestDraft) => {
-    const res = await fetch('/api/ai/respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, inputType: 'text', priorDraft }) });
+  const ask = async (text: string, priorDraft?: ServiceRequestDraft, inputType: 'voice' | 'text' = priorDraft?.inputType ?? 'text') => {
+    const res = await fetch('/api/ai/respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, inputType, priorDraft }) });
     const data = await res.json();
+    if (res.ok === false || data.error) {
+      setAnswer(data.error || '지금은 연결할 수 없어요. 잠시 후 다시 시도해 주세요.');
+      setStep('answer');
+      return;
+    }
     setAnswer(data.assistant_text);
     setAnswerTurnId(data.id);
-    if (data.urgency === 'emergency') { setStep('emergency'); return; }
+    if (data.urgency === 'emergency') {
+      const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      const stored = await fetch('/api/senior-inputs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript: text, inputType, summary: data.summary, urgency: data.urgency, idempotencyKey, confirmed: true }) });
+      const storedBody = await stored.json();
+      setActiveEmergencyId(storedBody.emergency?.id ?? null);
+      setStep('emergency'); return;
+    }
     if (data.intent === 'service_request' && data.draft) {
       setDraft(data.draft);
       setStep('request');
       return;
     }
     setDraft(null);
+    if (!priorDraft) {
+      const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      await fetch('/api/senior-inputs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript: text, inputType, summary: data.summary || data.assistant_text, urgency: data.urgency, idempotencyKey, confirmed: true }) });
+    }
     setStep('answer');
   };
 
@@ -97,23 +112,34 @@ export function SeniorExperience() {
       setStep('answer');
     }
   };
-  const confirmHeard = async () => { await ask(heard); };
+  const confirmHeard = async () => { await ask(heard, undefined, 'voice'); };
 
   const confirmRequest = async () => {
     if (!draft) return;
     const idempotencyKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    const res = await fetch('/api/service-requests', {
+    const res = await fetch('/api/senior-inputs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: draft.type, summary: draft.summary, transcript: draft.transcript, inputType: draft.inputType, details: draft.details, missingFields: draft.missingFields, idempotencyKey, confirmed: true }),
+      body: JSON.stringify({
+        transcript: draft.transcript,
+        inputType: draft.inputType,
+        idempotencyKey,
+        confirmed: true,
+        request: { type: draft.type, summary: draft.summary, details: draft.details, missingFields: draft.missingFields },
+      }),
     });
-    await res.json();
+    const result = await res.json();
+    if (res.ok === false || result.error) {
+      setAnswer(result.error || '요청을 저장하지 못했어요. 잠시 후 다시 보내 주세요.');
+      setStep('answer');
+      return;
+    }
     await refetchMyRequests();
     setDraft(null);
     setStep('sent');
   };
 
-  const openEmergency = () => { setHeard('긴급 도움 버튼을 눌렀어요.'); setCallConfirmed(false); setNotified({ family: false, worker: false }); setStep('emergency'); };
+  const openEmergency = () => { setHeard('긴급 도움 버튼을 눌렀어요.'); setActiveEmergencyId(null); setCallConfirmed(false); setNotified({ family: false, worker: false }); setStep('emergency'); };
 
   /**
    * 가족/사회복지사 알림은 실제 POST /api/emergencies 호출로 감사 로그에 남는다(FR-03).
@@ -122,11 +148,11 @@ export function SeniorExperience() {
    */
   const notify = async (actor: 'family' | 'worker') => {
     try {
-      await fetch('/api/emergencies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ utterance: heard || input, location: '대전광역시 중구 (데모 위치)', confirmed: true }),
-      });
+      if (!activeEmergencyId) {
+        const response = await fetch('/api/emergencies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ utterance: heard || input, location: '대전광역시 중구 (데모 위치)', confirmed: true }) });
+        const event = await response.json();
+        if (event.id) setActiveEmergencyId(event.id);
+      }
     } catch {
       // 알림 전송 실패는 화면에 알리되(연결 상태 표시는 상위 훅이 이미 담당) 긴급 흐름을 막지 않는다.
     }
@@ -140,7 +166,7 @@ export function SeniorExperience() {
     {step === 'request' && draft && <section className="senior-panel"><p className="eyebrow">🤖 AI 요약</p><h1>{typeLabel[draft.type] ?? '요청'}이에요</h1><div className="summary-card"><span className="ai-pill">AI</span><strong>{draft.summary}</strong>{draft.details.destination && <span>목적지: {draft.details.destination}</span>}</div>{draft.missingFields.length > 0 ? <><p>{draft.missingFields[0]}을 알려주시겠어요?</p><div className="text-entry"><input aria-label="추가 정보 입력" value={input} onChange={(event) => setInput(event.target.value)} /><button onClick={async () => { await ask(input, draft); }}>답하기</button></div></> : <SpeechControls text={answer} assistantTurnId={answerTurnId} />}<div className="two-actions"><button className="secondary" onClick={() => { setDraft(null); setStep('home'); }}>취소</button><button className="primary" onClick={confirmRequest} disabled={draft.missingFields.length > 0}>보내주세요</button></div></section>}
     {step === 'sent' && <section className="senior-panel"><h1>담당자에게 보냈어요</h1><p>확인하시면 담당자가 살펴볼 거예요.</p><button className="primary wide" onClick={() => setStep('requests')}>내 요청 보기</button></section>}
     {step === 'answer' && <section className="senior-panel"><div className="chat ai"><span>AI</span>{answer}</div><SpeechControls text={answer} assistantTurnId={answerTurnId} /><button className="primary wide" onClick={() => setStep('home')}>알겠어요</button></section>}
-    {step === 'requests' && <section className="senior-panel"><h1>내 요청 보기</h1>{myRequests.length === 0 && <div className="request-card"><span className="pill amber">진행 중</span><strong>병원 동행 도움</strong><p>담당자가 확인 중이에요.</p></div>}{myRequests.map((item) => <div className="request-card" key={item.id}><StatusPill status={statusLabelFor('senior', item.status)} /><strong>{typeLabel[item.type] ?? item.type}</strong><p>{statusLabelFor('senior', item.status)}</p></div>)}<button className="secondary wide" onClick={() => setStep('home')}>홈으로</button></section>}
+    {step === 'requests' && <section className="senior-panel"><h1>내 요청 보기</h1><div className="care-card-feed">{myRequests.length === 0 && <p className="notice">아직 보낸 요청이 없어요.</p>}{myRequests.map((item) => <CareRequestCard card={item} role="senior" key={item.id} />)}</div><button className="secondary wide" onClick={() => setStep('home')}>홈으로</button></section>}
     {step === 'companion' && <section className="senior-panel"><h1>말동무</h1><div className="chat ai"><span>AI</span>오늘 기억나는 좋은 일이 있으세요?</div><SpeechControls text="오늘 기억나는 좋은 일이 있으세요?" /><p className="privacy-note">대화 원문은 가족에게 공유되지 않아요.</p><button className="secondary wide" onClick={() => setStep('home')}>홈으로</button></section>}
     {step === 'emergency' && <section className="emergency-screen"><p>긴급 도움이 필요할 수 있어요</p><h1>지금 119에<br />전화할까요?</h1><div className="emergency-summary">위치: 대전광역시 중구 (데모 위치)<br />발화: {heard || input}<br />시각: 방금 전</div>{!callConfirmed ? <button className="call-button" onClick={() => setCallConfirmed(true)}>119 전화하기</button> : <a href="tel:119" className="call-button">📞 119 전화 걸기 (전화 화면 열림)</a>}<button onClick={() => notify('family')} disabled={notified.family}>{notified.family ? '가족에게 알림 전달됨' : '가족에게 알리기'}</button><button onClick={() => notify('worker')} disabled={notified.worker}>{notified.worker ? '사회복지사에게 알림 전달됨' : '사회복지사에게 알리기'}</button><button className="cancel-link" onClick={() => setStep('home')}>취소</button></section>}
     <button className="fixed-emergency" onClick={openEmergency}>긴급 도움</button>
