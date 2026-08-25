@@ -30,5 +30,10 @@ export function useEmergencyList() {
     return () => clearInterval(timer);
   }, [load]);
 
-  return { emergencies, refreshEmergencies: load };
+  const removeEmergencyOptimistically = useCallback((id: string) => {
+    setEmergencies((current) => current.filter((event) => event.id !== id));
+  }, []);
+  const restoreEmergency = useCallback((event: EmergencyEvent) => setEmergencies((current) => current.some((item) => item.id === event.id) ? current : [event, ...current]), []);
+
+  return { emergencies, refreshEmergencies: load, removeEmergencyOptimistically, restoreEmergency };
 }

@@ -4,16 +4,16 @@ import { selectSeniorInputRepository } from './seniorInputRepositoryFactory';
 import { InMemorySeniorInputRepository } from './seniorInputRepository';
 import { selectEmergencyRepository } from './emergencyRepositoryFactory';
 import { realtime } from './realtime';
+import { demoFamilyId, demoSeniorId, demoWorkerId } from './storeIds';
+import { selectCareRelationshipRepository } from './careRelationshipRepositoryFactory';
+
+export { demoFamilyId, demoSeniorId, demoWorkerId } from './storeIds';
 
 const now = () => new Date().toISOString();
 // 실제 Supabase 스키마(0001_demo_schema.sql)에서 senior_id/assignee_id는 profiles(id uuid)를
 // 참조하는 uuid 컬럼이다. 문자열 슬러그(예: 'senior-demo-001')는 uuid 캐스팅/FK 제약을
 // 통과하지 못해 실제 프로젝트 대상 INSERT가 실패하므로, 데모 계정도 고정 UUID를 쓴다.
 // 이 세 UUID에 대응하는 profiles 행은 supabase/migrations/0002_seed_demo_profiles.sql로 시딩한다.
-export const demoSeniorId = '67097470-30f1-4f42-9934-1675776fd220';
-export const demoFamilyId = '32765095-392f-41b9-b7d8-2598b3dc7ff6';
-export const demoWorkerId = 'd4544569-53e6-4caa-8076-2a0d50fac39a';
-
 /**
  * 담당 관계 조회 — PRD §11.4: 구독 단위는 담당 관계다. 실제 구현에서는 `care_relationships`
  * 테이블을 조회하지만, 데모는 고정된 1:1 배정(demoWorkerId → demoSeniorId)만 시드한다.
@@ -29,6 +29,7 @@ type RuntimeRepositories = typeof globalThis & {
   __dolbomServiceRequests?: ReturnType<typeof selectServiceRequestRepository>;
   __dolbomSeniorInputs?: ReturnType<typeof selectSeniorInputRepository>;
   __dolbomEmergencies?: ReturnType<typeof selectEmergencyRepository>;
+  __dolbomCareRelationships?: ReturnType<typeof selectCareRelationshipRepository>;
 };
 const runtimeRepositories = globalThis as RuntimeRepositories;
 
@@ -72,6 +73,11 @@ const emergencySelection = runtimeRepositories.__dolbomEmergencies ?? selectEmer
 runtimeRepositories.__dolbomEmergencies = emergencySelection;
 export const emergencyEvents = emergencySelection.repository;
 export const emergencyEventsProvider = emergencySelection.provider;
+
+const careRelationshipSelection = runtimeRepositories.__dolbomCareRelationships ?? selectCareRelationshipRepository();
+runtimeRepositories.__dolbomCareRelationships = careRelationshipSelection;
+export const careRelationships = careRelationshipSelection.repository;
+export const careRelationshipsProvider = careRelationshipSelection.provider;
 
 export const state: { turns: AssistantTurn[]; consents: ConsentGrant[] } = {
   turns: [],

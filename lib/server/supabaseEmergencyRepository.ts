@@ -36,4 +36,9 @@ export class SupabaseEmergencyRepository implements EmergencyRepository {
     event.actions.push({ actor: input.actor, action: input.action, result: '앱 내 처리 상태 반영', at: new Date().toISOString() });
     return event;
   }
+  async delete(id: string, actorId: string) {
+    const { data, error } = await this.client.rpc('delete_emergency_event_with_source', { p_event_id: id, p_actor_id: actorId });
+    if (error || !data) throw new Error(`emergency_events 삭제 실패: ${error?.message ?? '알림을 찾을 수 없습니다.'}`);
+    return mapRow(data as EmergencyRow);
+  }
 }

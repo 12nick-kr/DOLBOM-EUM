@@ -38,24 +38,18 @@ describe('FamilyDashboard — driven by the real service-requests API, not hardc
   });
 });
 
-describe('FamilyDashboard — emergency acknowledgement leaves an audit trail (Phase 5, FR-03)', () => {
+describe('FamilyDashboard — linked-family emergency visibility is read-only', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('calls the real emergencies API (not only local state) when the family confirms an emergency', async () => {
+  it('does not offer or call a server mutation for family emergency viewing', async () => {
     const fetchMock = dashboardFetch();
     vi.stubGlobal('fetch', fetchMock);
     render(<FamilyDashboard />);
     fireEvent.click(await screen.findByText('가슴 통증과 호흡 곤란 표현이 감지되었어요'));
-    fireEvent.click(screen.getByRole('button', { name: '확인 완료' }));
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(screen.getByText('부양가족 계정은 연결된 노인의 현황을 열람만 할 수 있어요.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '확인 완료' })).toBeNull();
     const patchCall = fetchMock.mock.calls.find((call) => String(call[0]).includes('/api/emergencies/') && call[1]?.method === 'PATCH');
-    expect(patchCall).toBeDefined();
-    const patchInit = patchCall?.[1] as RequestInit;
-    expect(patchInit.method).toBe('PATCH');
-    const body = JSON.parse(String(patchInit.body));
-    expect(body.actor).toBeUndefined();
-    expect(body.status).toBe('family_acknowledged');
+    expect(patchCall).toBeUndefined();
   });
 
   it('never displays text claiming an actual 119 report was completed', async () => {

@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
-import { GET } from '@/app/api/session/[role]/route';
+import { POST as signup } from '@/app/api/auth/signup/route';
+import { POST as login } from '@/app/api/auth/login/route';
 
-describe('demo session role selection', () => {
-  it('sets a demo-role cookie and redirects to the matching role screen', async () => {
-    const request = new NextRequest(new URL('/api/session/senior', 'http://localhost:3000'));
-    const response = await GET(request, { params: Promise.resolve({ role: 'senior' }) });
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toContain('/senior');
-    const cookie = response.cookies.get('demo-role');
-    expect(cookie?.value).toBe('senior');
+describe('virtual phone demo authentication', () => {
+  it('creates an active role account and a signed session without SMS', async () => {
+    const request = new NextRequest(new URL('/api/auth/signup', 'http://localhost:3000'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: '김순자', phone: '010-0000-9101', pin: '123456', pinConfirm: '123456', role: 'senior' }) });
+    const response = await signup(request);
+    expect(response.status).toBe(201);
+    expect((await response.json()).redirectTo).toBe('/senior');
+    expect(response.cookies.get('dolbom-demo-session')?.value).toBeTruthy();
   });
 
-  it('rejects an invalid role instead of setting an arbitrary cookie value', async () => {
-    const request = new NextRequest(new URL('/api/session/hacker', 'http://localhost:3000'));
-    const response = await GET(request, { params: Promise.resolve({ role: 'hacker' }) });
+  it('rejects a real-looking phone outside the reserved demo range', async () => {
+    const request = new NextRequest(new URL('/api/auth/signup', 'http://localhost:3000'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: '테스트', phone: '010-1234-5678', pin: '123456', pinConfirm: '123456', role: 'senior' }) });
+    const response = await signup(request);
     expect(response.status).toBe(400);
+  });
+
+  it('signs in with the virtual phone and six-digit PIN', async () => {
+    const request = new NextRequest(new URL('/api/auth/login', 'http://localhost:3000'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '010-0000-9101', pin: '123456' }) });
+    const response = await login(request);
+    expect(response.status).toBe(200);
+    expect((await response.json()).redirectTo).toBe('/senior');
   });
 });
