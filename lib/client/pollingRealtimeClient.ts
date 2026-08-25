@@ -1,5 +1,5 @@
 'use client';
-import type { ServiceRequest } from '@/lib/domain/types';
+import type { ServiceRequestView as ServiceRequest } from '@/lib/domain/types';
 import type { RealtimeClientEvent, RealtimeClientPort, RealtimeConnectionState } from './realtimePort';
 
 /**

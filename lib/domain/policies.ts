@@ -46,6 +46,13 @@ export function statusLabelFor(role: Role, status: PersistedRequestStatus): stri
   return statusLabels[role][status];
 }
 
+/** 요청 종류 표기는 세 역할 화면이 동일해야 하므로 여기서만 정의한다. */
+export const requestTypeLabel: Record<ServiceRequest['type'], string> = {
+  hospital_escort: '병원 동행 요청',
+  welfare_info: '복지 정보 안내',
+  daily_help: '일상 도움 요청',
+};
+
 export function emergencyStatusLabel(status: EmergencyEvent['status']): string {
   if (status === 'closed') return '긴급 종료됨';
   if (status === 'worker_followup') return '사회복지사 대응 중';

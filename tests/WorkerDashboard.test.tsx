@@ -88,3 +88,18 @@ describe('WorkerDashboard — inbox driven by real API + realtime, not hardcoded
     expect(screen.queryByText(emergency.utterance)).toBeNull();
   });
 });
+
+describe('로그인한 계정 기준 표시 (하드코딩 데모 이름 금지)', () => {
+  it('인사말과 담당 노인 이름을 세션·카드에서 가져온다', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/session') return { ok: true, json: async () => ({ data: { id: 'w-1', role: 'worker', displayName: '정복지' } }) };
+      if (url === '/api/care-cards') return { ok: true, json: async () => ({ data: [{ ...seedCard, seniorName: '한말순' }] }) };
+      return { ok: true, json: async () => ({ data: [] }) };
+    }));
+    render(<WorkerDashboard />);
+    expect(await screen.findByText('좋은 아침이에요, 정복지님')).toBeVisible();
+    expect(screen.queryByText(/박사회복지사/)).toBeNull();
+    expect(await screen.findByText('한말순')).toBeVisible();
+    expect(screen.queryByText(/김순자/)).toBeNull();
+  });
+});

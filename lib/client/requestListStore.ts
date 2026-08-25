@@ -1,4 +1,4 @@
-import type { ServiceRequest } from '@/lib/domain/types';
+import type { ServiceRequestView as ServiceRequest } from '@/lib/domain/types';
 import type { ConnectionState } from '@/lib/server/realtime';
 
 /**
