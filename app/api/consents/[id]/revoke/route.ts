@@ -1,0 +1,2 @@
+import { NextResponse } from 'next/server'; import { state } from '@/lib/server/store';
+export async function PATCH(_: Request, context: { params: Promise<{ id: string }> }) { const { id } = await context.params; const consent = state.consents.find((item) => item.id === id); if (!consent) return NextResponse.json({ error: '동의를 찾을 수 없어요.' }, { status: 404 }); consent.revokedAt = new Date().toISOString(); return NextResponse.json(consent); }

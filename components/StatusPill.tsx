@@ -1,0 +1,1 @@
+export function StatusPill({ status }: { status: string }) { const tone = /긴급|미확인|emergency/.test(status) ? 'red' : /주의|확인|등록|needs|family/.test(status) ? 'amber' : /완료|안정|검증|completed/.test(status) ? 'mint' : /신규|new|AI/.test(status) ? 'blue' : 'gray'; return <span className={`pill ${tone}`}>{status}</span>; }

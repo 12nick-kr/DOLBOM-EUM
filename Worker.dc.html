@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <style>
+    body{ margin:0; background:#F2F4F6; }
+  </style>
+</helmet>
+<div style="min-height:100vh; background:#F2F4F6; padding:56px 48px 96px; font-family:'Pretendard',-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif; box-sizing:border-box;">
+  <div style="max-width:1320px; margin:0 auto 44px;">
+    <div style="font-size:13px; font-weight:700; color:#3182F6; letter-spacing:.06em;">CARELINK AI · 사회복지사 화면 시안</div>
+    <div style="font-size:30px; font-weight:800; color:#191F28; margin-top:10px;">돌봄이음 AI — 사회복지사 UI (관리자 대시보드)</div>
+    <div style="font-size:15px; color:#4E5968; margin-top:8px; max-width:720px; line-height:1.6;">참고 스크린샷의 사이드바·카드 그리드·AI 요약 패널 구성을 토스 스타일 톤(화이트 배경·블루 포인트·둥근 카드)으로 재구성했습니다. 데스크톱 관리자 화면 기준입니다.</div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:56px; max-width:1320px; margin:0 auto;">
+
+    <!-- FRAME 1: WORKER DASHBOARD -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="font-size:14px; font-weight:800; color:#191F28; align-self:flex-start;">1 · 담당자 대시보드</div>
+      <div style="width:1280px; background:#fff; border-radius:24px; box-shadow:0 30px 70px rgba(15,23,42,.14); overflow:hidden; display:flex;">
+        <!-- sidebar -->
+        <div style="width:224px; flex-shrink:0; background:#F9FAFB; border-right:1px solid #E5E8EB; padding:24px 16px; display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; gap:8px; padding:0 8px 22px;">
+            <div style="width:32px; height:32px; border-radius:9px; background:#3182F6; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;">🤝</div>
+            <div style="font-size:15px; font-weight:800; color:#191F28;">돌봄이음 AI</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="display:flex; align-items:center; gap:10px; background:#EBF2FE; color:#3182F6; font-weight:800; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📊</span>대시보드</div>
+            <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>🚨</span>위기 알림</div>
+            <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📥</span>요청 업무함</div>
+            <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>🗂️</span>사례 관리</div>
+            <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>⚙️</span>설정</div>
+          </div>
+          <div style="margin-top:auto; background:#fff; border:1px solid #E5E8EB; border-radius:14px; padding:14px;">
+            <div style="font-size:12px; font-weight:800; color:#191F28;">홍성군 종합사회복지관</div>
+            <div style="font-size:11.5px; color:#8B95A1; margin-top:4px;">041-631-1234</div>
+          </div>
+        </div>
+        <!-- main -->
+        <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+          <div style="display:flex; align-items:center; gap:14px; padding:20px 28px; border-bottom:1px solid #E5E8EB;">
+            <div style="flex:1;">
+              <div style="font-size:19px; font-weight:800; color:#191F28;">안녕하세요, 박민준 사회복지사님</div>
+              <div style="font-size:13px; color:#8B95A1; margin-top:2px;">담당 노인 12명의 오늘 상태를 확인하세요.</div>
+            </div>
+            <div style="width:36px; height:36px; border-radius:10px; background:#F2F4F6; display:flex; align-items:center; justify-content:center;">🔔</div>
+            <div style="display:flex; align-items:center; gap:8px; background:#F2F4F6; padding:6px 12px 6px 6px; border-radius:999px;">
+              <div style="width:26px; height:26px; border-radius:50%; background:#3182F6; color:#fff; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;">박</div>
+              <span style="font-size:13px; font-weight:700; color:#191F28;">박민준</span>
+            </div>
+          </div>
+          <div style="padding:22px 28px; display:flex; flex-direction:column; gap:18px;">
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+              <div style="background:#FFEDEE; border-radius:16px; padding:16px;"><div style="font-size:24px; font-weight:800; color:#F04452;">1</div><div style="font-size:12.5px; color:#4E5968; margin-top:4px; font-weight:700;">미확인 긴급</div></div>
+              <div style="background:#FFF4E1; border-radius:16px; padding:16px;"><div style="font-size:24px; font-weight:800; color:#FF9F1A;">2</div><div style="font-size:12.5px; color:#4E5968; margin-top:4px; font-weight:700;">주의 필요</div></div>
+              <div style="background:#E3FBF3; border-radius:16px; padding:16px;"><div style="font-size:24px; font-weight:800; color:#01C88E;">6</div><div style="font-size:12.5px; color:#4E5968; margin-top:4px; font-weight:700;">안정</div></div>
+              <div style="background:#EBF2FE; border-radius:16px; padding:16px;"><div style="font-size:24px; font-weight:800; color:#3182F6;">3</div><div style="font-size:12.5px; color:#4E5968; margin-top:4px; font-weight:700;">신규 요청</div></div>
+            </div>
+            <div style="display:flex; gap:18px;">
+              <div style="flex:1.4; display:flex; flex-direction:column; gap:18px; min-width:0;">
+                <div style="border:1.5px solid #F04452; background:#FFF7F7; border-radius:18px; padding:18px;">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div>
+                      <span style="background:#F04452; color:#fff; font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px;">긴급</span>
+                      <div style="font-size:16px; font-weight:800; color:#191F28; margin-top:8px;">김영수 어르신 · 78세</div>
+                      <div style="font-size:13px; color:#4E5968; margin-top:2px;">가슴 통증·호흡 곤란 감지 · 방금 전 · 고혈압 이력</div>
+                    </div>
+                    <button style="background:#F04452; color:#fff; border:none; border-radius:10px; padding:9px 14px; font-size:12.5px; font-weight:800; white-space:nowrap;">사례 열기</button>
+                  </div>
+                </div>
+                <div style="border:1px solid #E5E8EB; border-radius:18px; padding:18px;">
+                  <div style="font-size:13.5px; font-weight:800; color:#191F28; margin-bottom:14px;">최근 7일 신규 요청 현황</div>
+                  <div style="display:flex; align-items:flex-end; gap:14px; height:80px;">
+                    <div style="width:26px; height:40%; background:#DCE8FE; border-radius:6px;"></div>
+                    <div style="width:26px; height:55%; background:#DCE8FE; border-radius:6px;"></div>
+                    <div style="width:26px; height:35%; background:#DCE8FE; border-radius:6px;"></div>
+                    <div style="width:26px; height:70%; background:#DCE8FE; border-radius:6px;"></div>
+                    <div style="width:26px; height:60%; background:#3182F6; border-radius:6px;"></div>
+                    <div style="width:26px; height:90%; background:#DCE8FE; border-radius:6px;"></div>
+                    <div style="width:26px; height:48%; background:#DCE8FE; border-radius:6px;"></div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; font-size:11px; color:#8B95A1; margin-top:8px;"><span>5/27</span><span>5/28</span><span>5/29</span><span>5/30</span><span>5/31</span><span>6/1</span><span>6/2</span></div>
+                </div>
+                <div style="border:1px solid #E5E8EB; border-radius:18px; padding:6px 18px;">
+                  <div style="font-size:13.5px; font-weight:800; color:#191F28; margin:12px 0 6px;">담당 노인 목록</div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #F2F4F6;"><span style="font-size:13.5px; color:#191F28; font-weight:700; white-space:nowrap;">김영수 어르신</span><span style="background:#FFEDEE; color:#F04452; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0;">긴급</span></div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #F2F4F6;"><span style="font-size:13.5px; color:#191F28; font-weight:700; white-space:nowrap;">박순자 어르신</span><span style="background:#FFF4E1; color:#FF9F1A; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0;">주의</span></div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #F2F4F6;"><span style="font-size:13.5px; color:#191F28; font-weight:700; white-space:nowrap;">최정자 어르신</span><span style="background:#F2F4F6; color:#4E5968; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0;">정보 부족</span></div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0;"><span style="font-size:13.5px; color:#191F28; font-weight:700; white-space:nowrap;">이복동 어르신</span><span style="background:#E3FBF3; color:#01C88E; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0;">안정</span></div>
+                </div>
+              </div>
+              <div style="width:290px; flex-shrink:0; display:flex; flex-direction:column; gap:18px;">
+                <div style="border:1px solid #E5E8EB; border-radius:18px; padding:16px;">
+                  <div style="font-size:13.5px; font-weight:800; color:#191F28; margin-bottom:10px;">오늘 할 일</div>
+                  <div style="font-size:13px; color:#191F28; padding:8px 0; border-bottom:1px solid #F2F4F6;">김영수 어르신 위기 대응 메모</div>
+                  <div style="font-size:13px; color:#191F28; padding:8px 0; border-bottom:1px solid #F2F4F6;">박순자 어르신 목욕 지원 가족 확인</div>
+                  <div style="font-size:13px; color:#191F28; padding:8px 0;">이복동 어르신 방문 일정 조정</div>
+                </div>
+                <div style="background:#F9FAFB; border-radius:18px; padding:16px;">
+                  <span style="background:#EBF2FE; color:#3182F6; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px;">🤖 AI 요약</span>
+                  <div style="font-size:13px; line-height:1.6; color:#191F28; margin-top:10px;">전체 담당 사례 중 활동량 급감·심혈관 키워드가 겹치는 1건이 최우선 확인 대상입니다.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME 2: CASE DETAIL -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="font-size:14px; font-weight:800; color:#191F28; align-self:flex-start;">2 · 노인 사례 상세</div>
+      <div style="width:1280px; background:#fff; border-radius:24px; box-shadow:0 30px 70px rgba(15,23,42,.14); overflow:hidden; display:flex;">
+        <div style="width:224px; flex-shrink:0; background:#F9FAFB; border-right:1px solid #E5E8EB; padding:24px 16px;">
+          <div style="display:flex; align-items:center; gap:8px; padding:0 8px 22px;">
+            <div style="width:32px; height:32px; border-radius:9px; background:#3182F6; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;">🤝</div>
+            <div style="font-size:15px; font-weight:800; color:#191F28;">돌봄이음 AI</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📊</span>대시보드</div>
+          <div style="display:flex; align-items:center; gap:10px; background:#EBF2FE; color:#3182F6; font-weight:800; font-size:14px; padding:11px 12px; border-radius:12px;"><span>🗂️</span>사례 관리</div>
+          <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📥</span>요청 업무함</div>
+        </div>
+        <div style="flex:1; padding:24px 28px; display:flex; flex-direction:column; gap:18px; min-width:0;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="width:52px; height:52px; border-radius:50%; background:#F04452; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800;">김</div>
+            <div style="flex:1;">
+              <div style="font-size:19px; font-weight:800; color:#191F28;">김영수 어르신 사례</div>
+              <div style="font-size:12.5px; color:#8B95A1; margin-top:2px;">78세 · 남 · 독거 · 충남 홍성군</div>
+            </div>
+            <span style="background:#FFEDEE; color:#F04452; font-size:12px; font-weight:800; padding:5px 12px; border-radius:999px;">긴급 · 미확인</span>
+          </div>
+          <div style="display:flex; gap:18px;">
+            <div style="flex:1.3; display:flex; flex-direction:column; gap:16px; min-width:0;">
+              <div style="border:1px solid #E5E8EB; border-radius:18px; padding:18px;">
+                <div style="font-size:13px; font-weight:800; color:#4E5968; margin-bottom:10px;">기본 정보</div>
+                <div style="font-size:13.5px; line-height:2; color:#191F28;">
+                  ⚠️ 건강 주의사항: 고혈압, 나트륨 제한<br>
+                  👨‍👩‍👧 가족 연락처: 이지현(딸) 010-****-5678<br>
+                  🔐 동의 범위: 건강요약·위치·서비스요청·위기정보
+                </div>
+              </div>
+              <div style="border:1px solid #E5E8EB; border-radius:18px; padding:18px;">
+                <div style="font-size:13px; font-weight:800; color:#4E5968; margin-bottom:12px;">타임라인</div>
+                <div style="display:flex; gap:10px; margin-bottom:14px;">
+                  <div style="width:8px; height:8px; border-radius:50%; background:#F04452; margin-top:6px; flex-shrink:0;"></div>
+                  <div><span style="background:#EBF2FE; color:#3182F6; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px;">🤖 AI 생성</span><div style="font-size:13.5px; color:#191F28; margin-top:5px;">긴급 발화 감지: "가슴이 조이고 숨쉬기가 힘들어"</div></div>
+                </div>
+                <div style="display:flex; gap:10px; margin-bottom:14px;">
+                  <div style="width:8px; height:8px; border-radius:50%; background:#E5E8EB; margin-top:6px; flex-shrink:0;"></div>
+                  <div><div style="font-size:11px; color:#8B95A1;">어제 오후 6:12 · 원본</div><div style="font-size:13.5px; color:#191F28; margin-top:2px;">음식 사진 확인 — 김치찌개, 나트륨 주의 안내</div></div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                  <div style="width:8px; height:8px; border-radius:50%; background:#E5E8EB; margin-top:6px; flex-shrink:0;"></div>
+                  <div><div style="font-size:11px; color:#8B95A1;">3일 전 · 원본</div><div style="font-size:13.5px; color:#191F28; margin-top:2px;">병원동행 요청 초안 생성 (화요일 충남대병원)</div></div>
+                </div>
+              </div>
+            </div>
+            <div style="width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:16px;">
+              <div style="border:1.5px solid #F04452; border-radius:18px; padding:16px;">
+                <div style="font-size:13px; font-weight:800; color:#191F28; margin-bottom:10px;">긴급 대응</div>
+                <button style="width:100%; height:44px; border-radius:12px; border:none; background:#F04452; color:#fff; font-size:13px; font-weight:800;">대응 메모 남기고 상태 변경</button>
+              </div>
+              <div style="background:#F9FAFB; border-radius:18px; padding:16px;">
+                <span style="background:#EBF2FE; color:#3182F6; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px;">🤖 AI 행정 보조</span>
+                <div style="font-size:13px; line-height:1.6; color:#191F28; margin-top:10px;">상담 요약: 심혈관 관련 증상 발화 1건, 나트륨 섭취 주의 필요. 병원동행 서비스 자격 요건 충족 추정(소득기준 확인 필요).</div>
+                <button style="width:100%; height:42px; border-radius:12px; border:1.5px solid #3182F6; background:#fff; color:#3182F6; font-size:12.5px; font-weight:800; margin-top:12px;">초안 검토·수정하기</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME 3: INBOX -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="font-size:14px; font-weight:800; color:#191F28; align-self:flex-start;">3 · 요청 업무함</div>
+      <div style="width:1280px; background:#fff; border-radius:24px; box-shadow:0 30px 70px rgba(15,23,42,.14); overflow:hidden; display:flex;">
+        <div style="width:224px; flex-shrink:0; background:#F9FAFB; border-right:1px solid #E5E8EB; padding:24px 16px;">
+          <div style="display:flex; align-items:center; gap:8px; padding:0 8px 22px;">
+            <div style="width:32px; height:32px; border-radius:9px; background:#3182F6; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;">🤝</div>
+            <div style="font-size:15px; font-weight:800; color:#191F28;">돌봄이음 AI</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📊</span>대시보드</div>
+          <div style="display:flex; align-items:center; gap:10px; background:#EBF2FE; color:#3182F6; font-weight:800; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📥</span>요청 업무함</div>
+          <div style="display:flex; align-items:center; gap:10px; color:#4E5968; font-weight:600; font-size:14px; padding:11px 12px; border-radius:12px;"><span>🗂️</span>사례 관리</div>
+        </div>
+        <div style="flex:1; padding:24px 28px; min-width:0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+            <div style="font-size:19px; font-weight:800; color:#191F28;">요청 업무함</div>
+            <div style="display:flex; gap:8px;">
+              <span style="background:#EBF2FE; color:#3182F6; font-size:12.5px; font-weight:800; padding:7px 14px; border-radius:999px;">전체</span>
+              <span style="color:#8B95A1; font-size:12.5px; font-weight:700; padding:7px 14px;">신규</span>
+              <span style="color:#8B95A1; font-size:12.5px; font-weight:700; padding:7px 14px;">진행 중</span>
+              <span style="color:#8B95A1; font-size:12.5px; font-weight:700; padding:7px 14px;">완료</span>
+            </div>
+          </div>
+          <div style="border:1px solid #E5E8EB; border-radius:16px; padding:16px 18px; display:flex; align-items:center; gap:16px; margin-bottom:10px;">
+            <span style="background:#EBF2FE; color:#3182F6; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:999px; width:52px; text-align:center;">신규</span>
+            <div style="flex:1;"><div style="font-size:14.5px; font-weight:800; color:#191F28;">병원동행 요청 — 김영수 어르신</div><div style="font-size:12.5px; color:#8B95A1; margin-top:3px;">화요일 오전 10시 · 충남대병원 · 🤖 AI 초안 생성됨</div></div>
+            <button style="background:#3182F6; color:#fff; border:none; border-radius:10px; padding:9px 16px; font-size:12.5px; font-weight:800;">열기</button>
+          </div>
+          <div style="border:1px solid #E5E8EB; border-radius:16px; padding:16px 18px; display:flex; align-items:center; gap:16px; margin-bottom:10px;">
+            <span style="background:#FFF4E1; color:#FF9F1A; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:999px; width:52px; text-align:center;">가족<br>확인</span>
+            <div style="flex:1;"><div style="font-size:14.5px; font-weight:800; color:#191F28;">목욕 지원 서비스 — 박순자 어르신</div><div style="font-size:12.5px; color:#8B95A1; margin-top:3px;">가족 동의 대기 중 · 담당자: 박민준</div></div>
+          </div>
+          <div style="border:1px solid #E5E8EB; border-radius:16px; padding:16px 18px; display:flex; align-items:center; gap:16px; margin-bottom:10px;">
+            <span style="background:#E3FBF3; color:#01C88E; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:999px; width:52px; text-align:center;">완료</span>
+            <div style="flex:1;"><div style="font-size:14.5px; font-weight:800; color:#191F28;">방문요양 신청 — 이복동 어르신</div><div style="font-size:12.5px; color:#8B95A1; margin-top:3px;">지난주 접수 완료</div></div>
+          </div>
+          <div style="border:1px solid #E5E8EB; border-radius:16px; padding:16px 18px; display:flex; align-items:center; gap:16px;">
+            <span style="background:#F2F4F6; color:#4E5968; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:999px; width:52px; text-align:center;">반려</span>
+            <div style="flex:1;"><div style="font-size:14.5px; font-weight:800; color:#191F28;">이동 지원 서비스 — 최정자 어르신</div><div style="font-size:12.5px; color:#8B95A1; margin-top:3px;">자격 요건 미충족</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME 4: REQUEST DETAIL -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="font-size:14px; font-weight:800; color:#191F28; align-self:flex-start;">4 · 병원동행 요청 상세</div>
+      <div style="width:1280px; background:#fff; border-radius:24px; box-shadow:0 30px 70px rgba(15,23,42,.14); overflow:hidden; display:flex;">
+        <div style="width:224px; flex-shrink:0; background:#F9FAFB; border-right:1px solid #E5E8EB; padding:24px 16px;">
+          <div style="display:flex; align-items:center; gap:8px; padding:0 8px 22px;">
+            <div style="width:32px; height:32px; border-radius:9px; background:#3182F6; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;">🤝</div>
+            <div style="font-size:15px; font-weight:800; color:#191F28;">돌봄이음 AI</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; background:#EBF2FE; color:#3182F6; font-weight:800; font-size:14px; padding:11px 12px; border-radius:12px;"><span>📥</span>요청 업무함</div>
+        </div>
+        <div style="flex:1; padding:24px 28px; display:flex; gap:18px; min-width:0;">
+          <div style="flex:1.3; display:flex; flex-direction:column; gap:16px; min-width:0;">
+            <div style="font-size:19px; font-weight:800; color:#191F28;">병원동행 요청 상세</div>
+            <div style="border:1px solid #E5E8EB; border-radius:18px; padding:18px;">
+              <span style="background:#EBF2FE; color:#3182F6; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:999px;">신규</span>
+              <div style="font-size:13px; font-weight:800; color:#4E5968; margin:14px 0 8px;">요청 정보</div>
+              <div style="font-size:13.5px; line-height:2; color:#191F28;">
+                👤 요청자: 김영수 어르신<br>
+                🗓️ 희망 일시: 다음 주 화요일 오전 10시<br>
+                🏥 목적지: 충남대학교병원<br>
+                🚗 이동 지원: 필요
+              </div>
+            </div>
+            <div style="background:#F9FAFB; border-radius:18px; padding:18px;">
+              <span style="background:#EBF2FE; color:#3182F6; font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px;">🤖 AI 신청 초안</span>
+              <div style="font-size:13.5px; line-height:1.6; color:#191F28; margin-top:10px;">김영수 어르신(78세, 독거, 고혈압)이 정기 진료를 위해 병원동행을 요청했습니다. 노인맞춤돌봄서비스 병원동행 지원 대상 요건 충족 가능성이 높으나, 최근 소득기준 확인 자료가 없습니다.</div>
+              <div style="font-size:11.5px; color:#8B95A1; margin-top:10px;">출처: 노인맞춤돌봄서비스 안내 · 기준일 2026-08-01 · 확인 필요</div>
+            </div>
+          </div>
+          <div style="width:340px; flex-shrink:0; display:flex; flex-direction:column; gap:14px;">
+            <div style="border:1px solid #E5E8EB; border-radius:18px; padding:16px;">
+              <div style="font-size:13px; font-weight:800; color:#191F28; margin-bottom:10px;">담당자 메모</div>
+              <div style="border:1.5px solid #E5E8EB; border-radius:12px; padding:12px; font-size:13px; color:#8B95A1;">검토 의견을 입력하세요</div>
+            </div>
+            <button style="width:100%; height:48px; border-radius:14px; border:1.5px solid #3182F6; background:#fff; color:#3182F6; font-size:13.5px; font-weight:800;">정보 확인 요청</button>
+            <button style="width:100%; height:48px; border-radius:14px; border:none; background:#3182F6; color:#fff; font-size:13.5px; font-weight:800;">기관 연결로 승인</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>
