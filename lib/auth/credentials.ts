@@ -46,17 +46,23 @@ export const virtualPhoneSchema = z.string().transform(normalizeVirtualPhone).pi
 
 export const demoPinSchema = z.string().regex(/^\d{6}$/, '비밀번호는 숫자 6자리여야 해요.');
 
-export const signupSchema = z.object({
+function mapLegacyPhoneField(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const input = value as Record<string, unknown>;
+  return { ...input, loginId: input.loginId ?? input.phone };
+}
+
+export const signupSchema = z.preprocess(mapLegacyPhoneField, z.object({
   displayName: z.string().trim().min(2, '이름을 2자 이상 입력해 주세요.').max(30),
-  phone: virtualPhoneSchema,
+  loginId: loginIdSchema,
   pin: demoPinSchema,
   pinConfirm: demoPinSchema,
   role: roleSchema,
-}).refine((value) => value.pin === value.pinConfirm, { path: ['pinConfirm'], message: '비밀번호가 서로 달라요.' });
+}).refine((value) => value.pin === value.pinConfirm, { path: ['pinConfirm'], message: '비밀번호가 서로 달라요.' }));
 
-export const loginSchema = z.object({
-  phone: virtualPhoneSchema,
+export const loginSchema = z.preprocess(mapLegacyPhoneField, z.object({
+  loginId: loginIdSchema,
   pin: demoPinSchema,
-});
+}));
 
 export type DemoSignupInput = z.infer<typeof signupSchema>;
