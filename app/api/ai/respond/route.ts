@@ -19,6 +19,7 @@ const bodySchema = z.object({
   text: z.string().min(1).max(1000),
   seniorId: z.string().default(demoSeniorId),
   inputType: requestInputTypeSchema.default('text'),
+  purpose: z.enum(['conversation', 'service_request']).default('conversation'),
   priorDraft: priorDraftSchema.optional(),
 });
 

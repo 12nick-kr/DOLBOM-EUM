@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { respondToUtterance } from '@/lib/server/chatUseCase';
+import { fixtureAi } from '@/lib/server/ai';
 
 describe('chat use case — text and voice share one structure (PRD FR-04, FR-07)', () => {
   it('produces an assistant turn with text and idle speech status for a text utterance', async () => {
@@ -47,5 +48,15 @@ describe('chat use case — text and voice share one structure (PRD FR-04, FR-07
     const turn = await respondToUtterance({ text: '가슴이 아프고 숨이 차요', seniorId: 'senior-1', inputType: 'voice' });
     expect(turn.urgency).toBe('emergency');
     expect(turn.draft).toBeUndefined();
+  });
+
+  it('guarantees a draft for the request-creation purpose even when the AI classifies the text as conversation', async () => {
+    const conversationAi = {
+      ...fixtureAi,
+      classifyAndDraft: async () => ({ intent: 'conversation' as const, urgency: 'normal' as const, summary: '일상 대화로 이해했어요.', missing_fields: [], proposed_tool: null, requires_confirmation: false }),
+    };
+    const turn = await respondToUtterance({ text: '장보기를 부탁하고 싶어요.', seniorId: 'senior-1', inputType: 'text', purpose: 'service_request' }, conversationAi);
+    expect(turn.intent).toBe('service_request');
+    expect(turn.draft).toMatchObject({ transcript: '장보기를 부탁하고 싶어요.', inputType: 'text', type: 'daily_help' });
   });
 });
