@@ -37,7 +37,11 @@ export async function POST(request: NextRequest) {
           login_id: loginId,
           account_status: 'active',
         });
-        if (profileError) throw new Error(profileError.message);
+        if (profileError) {
+          console.error('[auth/signup] profiles insert 실패:', profileError.code, profileError.message);
+          if (profileError.code === '23505') throw new Error('이미 사용 중인 아이디예요.');
+          throw new Error(profileError.message);
+        }
 
         const response = NextResponse.json({ redirectTo: `/${role}` }, { status: 201 });
         const client = createSupabaseResponseClient(request, response);

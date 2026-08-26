@@ -440,3 +440,39 @@
   - 실제 Supabase에서 요청 hard delete를 쓰려면 소유자가 수정된 `0004_service_request_delete.sql`을 다시 적용해야 한다.
   - 현재 인증은 합성 데모 역할 쿠키이므로 공개 실서비스 인증이 아니다. 데모 배지는 유지하며 실제 개인정보를 입력하면 안 된다.
   - SSE 연결이 Vercel 함수 제한으로 종료돼도 1초 서버 재조회 폴백이 카드 정본을 복구한다.
+
+## 2026-08-25 — 관리자 상세화면 뒤로가기 버튼 시인성 개선
+
+- 목표: `/worker`에서 사례 상세·요청 상세 화면에 들어가면 목록으로 돌아가는 `.back` 버튼(‹ 대시보드, ‹ 요청 업무함)이 옅은 회색 텍스트 링크로만 있어 눈에 잘 띄지 않는다는 사용자 피드백을 해결한다.
+- 조사: `components/WorkerDashboard.tsx`의 두 `.back` 버튼은 `app/globals.css`의 단일 규칙(`color: var(--ink-2); font-size: 14px; padding만 있고 배경·터치 최소 높이 없음`)만 적용받고 있었다. 저장소에는 이미 시인성 좋은 `.secondary` 버튼 패턴(`--bg-alt` 배경 + `--ink` 텍스트 + `--touch-min`)이 있어 새 토큰 없이 재사용했다.
+- Green: `.back`을 배경(`--bg-alt`)·진한 글자색(`--ink`)·`border-radius: var(--radius-control)`·`min-height: var(--touch-min)`을 가진 버튼형으로 교체했다. JSX(클래스명, 클릭 핸들러, 텍스트)는 변경하지 않았다.
+- 검증: CSS 전용 변경이라 typecheck/lint 영향 없음을 확인했고, 관련 컴포넌트 테스트가 텍스트/역할 기반 쿼리를 쓰므로 영향받지 않았다.
+
+## 2026-08-26 — 5관점 병렬 코드 리뷰(보안·프론트로직·데이터·접근성·의존성)와 수정 4건 커밋
+
+- 목표: 프로덕션(Vercel) 배포 중인 앱을 대상으로 보안·알고리즘·UI/UX 관점의 전면 점검을 수행하고, 실제 결함만 수정한 뒤 전체 검증(typecheck/lint/test/build) 후 기능별로 커밋해 `origin/main`에 푸시한다.
+- 방법: 5개 백그라운드 에이전트를 병렬 실행해 (1) API 라우트·서버 코드 보안(인가/입력검증/정보노출/남용방지), (2) 프론트엔드 상태·경쟁조건 로직, (3) Supabase 마이그레이션과 코드 간 스키마 일관성, (4) 접근성(WCAG 대비·터치타깃·긴급화면 UX), (5) 테스트·빌드·`npm audit` 의존성 취약점을 각각 리뷰만(수정 없이) 수행하게 했다.
+- 발견 및 수정 — 보안(커밋 `8565996`):
+  - 로그인 API에 rate limit이 전혀 없어 010-0000-0\d{4}(1만 종) × PIN 6자리(100만 종) 조합의 무차별 대입이 가능했다. `lib/server/rateLimit.ts`(신규, 서버리스 인스턴스 메모리 기반 슬라이딩 윈도우)를 만들어 로그인(IP+아이디 기준 10회/10분)과 긴급신고 생성(계정 기준 3회/1분)에 적용했다.
+  - `lib/server/supabaseCareRelationshipRepository.ts`가 Postgres/PostgREST `error.message`를 그대로 `throw`해 `app/api/care-management/relationships/route.ts`를 통해 인증된 worker에게 테이블/컬럼/제약조건명이 노출될 수 있었다. `dbError()` 헬퍼로 감싸 서버 로그에만 원인을 남기고 클라이언트에는 고정 메시지만 반환하도록 했다. 도메인 검증 메시지(역할 불일치 등 사용자에게 보여줘도 되는 것)는 그대로 뒀다.
+  - `app/api/consents/[id]/revoke/route.ts`가 `hasSupabaseAuthEnvironment()` 분기 없이 항상 in-memory `state.consents`만 수정하고 있었다 — `consents/route.ts`(GET/POST)는 이미 Supabase `consent_grants` 테이블과 분기 처리하는데 revoke만 누락된 상태였다. 즉 프로덕션에서는 노인 사용자가 정보 공유 동의를 철회해도 실제 DB에는 반영되지 않는 버그였다. 동일한 분기를 추가해 Supabase 모드에서 `consent_grants.revoked_at`을 갱신하도록 수정했다.
+- 발견 및 수정 — 프론트엔드 로직(커밋 `f9c24b3`):
+  - `WorkerDashboard.tsx`의 `takeCharge`/`completeRequest`에 in-flight 가드가 없어 "진행중으로 변경" 버튼 연타 시 중복 PATCH가 발생할 수 있었다. `statusChangingIds` Set으로 요청별 가드를 추가하고 버튼을 `disabled` 처리했다.
+  - 실시간 이벤트로 상세 화면에 있는 요청이 목록에서 사라지면 `selected`가 `null`이 되어 콘텐츠 영역이 조용히 빈 화면이 되는 문제가 있었다. `selected`가 사라지면 자동으로 인박스로 돌아가는 `useEffect`를 추가했다.
+  - `SpeechControls.tsx`의 `play()`가 fire-and-forget 방식이라, 화면 전환이 빨라 `play()`가 연속 호출되면 늦게 도착한 이전 호출의 `/api/ai/speech` 응답이 최신 재생을 덮어써 음성이 겹치거나 끊기는 경쟁 조건이 있었다. `playGenerationRef` 세대 토큰을 추가해 stale 응답은 오디오 객체 교체·재생을 하지 않도록 막았다.
+  - `lib/domain/urgency.ts`의 `attentionPatterns`(어지럼·낙상 등)는 emergency 패턴과 달리 부정 표현을 걸러내지 않아 "안 넘어졌어요"도 낙상 가능성(attention)으로 오탐됐다. `attentionNegationPatterns`를 추가하고 `isAttentionNegated()`로 걸러내도록 수정했다.
+- 발견 및 수정 — 접근성(커밋 `b093842`):
+  - `.pill.amber`/`.pill.mint` 텍스트 대비가 각각 1.89:1/2.01:1, `--ink-3`(회색 보조 텍스트)가 surface/bg-alt 위에서 2.76~3.04:1로 WCAG AA 본문 기준(4.5:1)에 크게 미달했다. `--amber-strong`(#a15c00, 4.76:1)/`--mint-strong`(#007a57, 4.94:1) 텍스트 전용 토큰을 추가하고, `--ink-3`을 `#5e6b78`(surface 5.45:1, bg-alt 4.95:1)로 조정했다. 배경·보더 강조색인 `--amber`/`--mint` 자체는 브랜드 일관성을 위해 바꾸지 않았다.
+  - 긴급 화면에서 119 전화는 2단계 확인(`callConfirmed`)이 있는데 "홈으로"(활성 긴급 상황 종료)는 확인 없이 즉시 실행돼, 실수로 누르면 진행 중인 긴급 상황이 조기 종료될 위험이 있었다. `closeConfirmPending` 상태를 추가해 같은 2단계 확인 패턴을 적용했다.
+- 검토했으나 수정하지 않음: AuthPage의 공백 입력(서버 `signupSchema`가 이미 `.trim().min(2)`로 방어 중이라 실제 취약점 아님), `0013` 마이그레이션 파일명과 실제 내용 불일치(문서적 사소한 문제), postcss High 취약점(해소하려면 Next.js 16 메이저 업그레이드가 필요해 범위가 커서 사용자 확인 후 보류).
+- 의존성(커밋 `646b526`): `npm audit fix`로 Next.js 내부 번들 sharp/libvips High 취약점(CVE-2026-33327/33328/35590/35591) 해소. postcss 관련 잔여 취약점은 `--force`(Next 16 breaking change)가 필요해 별도 세션으로 미뤘다.
+- 검증: `npm run typecheck`, `npm run lint` 통과(0 errors/warnings). `npm test -- --run` 41개 파일/261개 테스트 통과(기존 "홈으로" 즉시 종료를 가정한 테스트를 2단계 확인에 맞게 수정, urgency attention 부정 표현 회귀 테스트와 긴급 종료 오터치 방지 회귀 테스트 신규 추가). `npm run build` 30개 라우트 정상 생성.
+- 커밋: `8565996`(security), `f9c24b3`(logic), `b093842`(a11y), `646b526`(deps) — 4개로 나눠 `origin/main`에 푸시 완료.
+
+## 2026-08-26 — 회원가입 500 에러(중복 아이디 오탐 없음 → 실제로는 에러 분류 누락) 진단·수정
+
+- 증상: 프로덕션에서 `POST /api/auth/signup`이 브라우저 네트워크 탭에 500으로 표시됐다(사용자 스크린샷). Vercel 함수 인보케이션 상세를 보면 `auth/v1/admin/users`(POST, 성공) → `rest/v1/profiles`(POST) → `auth/v1/admin/users/{id}`(DELETE, 롤백) 순으로 호출돼, auth 사용자 생성은 성공하고 `profiles` insert 단계에서 실패해 방금 만든 auth 사용자를 정리하는 기존 롤백 로직이 정상 동작한 것까지는 확인됐다.
+- 진단: `vercel logs`로 해당 시간대 요청이 반복 500임을 확인한 뒤, 저장소 루트에 임시 스크립트를 만들어 실제 Supabase(서비스 롤 키)에 동일한 `createUser → profiles.insert` 흐름을 재현했다. 신규 로그인 아이디로는 정상 동작했지만, 스크린샷과 동일한 `010-0000-0014`로 재현하자 `profiles` insert가 `23505 duplicate key value violates unique constraint "profiles_login_id_unique"`로 실패했다. 해당 `login_id`를 가진 기존 `profiles` 행을 직접 조회해 "김참치"라는 이미 가입된 정상 계정이 존재함을 확인했다(auth.users 레코드도 존재 — 고아 레코드 아님). 즉 사용자가 이미 사용 중인 아이디로 재가입을 시도한, 애초에 409로 안내됐어야 할 정상 케이스였다.
+- 근본 원인: `app/api/auth/signup/route.ts`의 catch 블록이 409(이미 가입됨) 판별을 위해 Supabase Auth의 "already registered" 문자열 패턴만 검사했다. 그런데 이번 실패는 Auth 단계가 아니라 `profiles` 테이블의 `login_id` 유니크 제약(Postgres 에러 코드 `23505`)에서 발생해 그 패턴에 걸리지 않았고, catch가 이를 알 수 없는 서버 오류로 취급해 500을 반환했다.
+- 수정: `profiles` insert 실패 시 `profileError.code === '23505'`를 명시적으로 검사해 "이미 사용 중인 아이디예요."로 던지도록 했다(기존 409 매칭 로직이 그대로 잡아 404/409 응답으로 이어진다). 원인 로그도 `console.error`로 남겼다.
+- 검증: `npm run typecheck`, `npm run lint`, `npm test -- --run`(41개 파일/261개 테스트), `npm run build` 모두 통과. 진단에 사용한 임시 스크립트(`_tmp_check_signup*.mjs`, `_tmp_check_orphan.mjs`)는 실행 후 즉시 삭제했고, 진단 과정에서 실제 프로덕션 데이터를 생성/수정하지 않도록 매번 새로 만든 진단용 계정을 스크립트 안에서 직접 삭제했다.
